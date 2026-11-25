@@ -105,9 +105,10 @@ clean:
 ios-project:
   cd iOS && xcodegen generate --quiet
 
-# The paired iPhone's id, read from devicectl, never hardcoded
+# The paired iPhone's id, read from devicectl, never hardcoded. Its state reads "available (paired)"
+# or "connected (no DDI)" (no developer disk image yet: xcodebuild mounts it); never "unavailable".
 _iphone:
-  @xcrun devicectl list devices 2>/dev/null | awk '/available \(paired\)/ && /iPhone/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i; exit }'
+  @xcrun devicectl list devices 2>/dev/null | awk '/iPhone/ && /physical/ && !/unavailable/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i; exit }'
 
 # Build for the paired iPhone. Needs an Apple Development certificate in Xcode → Settings → Accounts.
 ios-build: ios-project
@@ -117,7 +118,7 @@ ios-build: ios-project
   device=$(just _iphone)
   test -n "$device" || { echo "no paired iPhone (xcrun devicectl list devices)"; exit 1; }
   xcodebuild -project iOS/Expenses.xcodeproj -scheme ExpensesPhone -configuration Release \
-    -destination "id=$device" -derivedDataPath .build/ios -allowProvisioningUpdates build | tail -3
+    -destination "id=$device" -derivedDataPath .build/ios -allowProvisioningUpdates -allowProvisioningDeviceRegistration build | tail -3
 
 # Owner only: install the last ios-build on the paired iPhone
 ios-install:
