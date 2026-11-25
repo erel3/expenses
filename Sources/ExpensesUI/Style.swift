@@ -42,6 +42,7 @@ public struct CategoryStyle {
     case "transport": self.init(color: .blue, symbol: "car.fill")
     case "subscriptions": self.init(color: .purple, symbol: "repeat")
     case "other": self.init(color: .gray, symbol: "questionmark")
+    case let merged where merged.hasPrefix("+"): self.init(color: .secondary, symbol: "ellipsis")
     default:
       let palette: [Color] = [.orange, .pink, .teal, .indigo, .brown, .mint, .cyan]
       let index = category.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xffff } % palette.count
@@ -94,13 +95,23 @@ struct CategoryIcon: View {
   }
 }
 
-/// A horizontal bar per category, longest = the largest category.
+/// A horizontal bar per category, longest = the largest category. More categories than `limit`:
+/// the largest `limit - 1`, then one bar for the rest together ("+3 more"), so the widget never
+/// grows with the number of categories and nothing spent drops out of sight.
 struct CategoryBars: View {
   let totals: [CategoryTotal]
   var limit = 4
 
+  static func fit(_ totals: [CategoryTotal], limit: Int) -> [CategoryTotal] {
+    guard totals.count > limit, limit > 1 else { return totals }
+    let kept = Array(totals.prefix(limit - 1))
+    let rest = totals.dropFirst(limit - 1)
+    return kept + [CategoryTotal(category: "+\(rest.count) more", kzt: rest.reduce(0) { $0 + $1.kzt },
+                                 count: rest.reduce(0) { $0 + $1.count })]
+  }
+
   var body: some View {
-    let shown = Array(totals.prefix(limit))
+    let shown = Self.fit(totals, limit: limit)
     let top = max(shown.first?.kzt ?? 1, 1)
     VStack(alignment: .leading, spacing: 6) {
       ForEach(shown, id: \.category) { total in

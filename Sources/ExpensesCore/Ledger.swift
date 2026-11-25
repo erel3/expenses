@@ -28,6 +28,12 @@ public struct CategoryTotal: Hashable, Sendable {
   public let category: String
   public let kzt: Double
   public let count: Int
+
+  public init(category: String, kzt: Double, count: Int) {
+    self.category = category
+    self.kzt = kzt
+    self.count = count
+  }
 }
 
 public struct Day: Hashable, Sendable {

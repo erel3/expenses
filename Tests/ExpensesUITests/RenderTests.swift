@@ -40,6 +40,14 @@ final class RenderTests: XCTestCase {
     }
   }
 
+  func testManyCategoriesMergeIntoOneBar() {
+    let totals = (1...7).map { CategoryTotal(category: "c\($0)", kzt: Double(100 * (8 - $0)), count: 1) }
+    let shown = CategoryBars.fit(totals, limit: 4)
+    XCTAssertEqual(shown.map(\.category), ["c1", "c2", "c3", "+4 more"])
+    XCTAssertEqual(shown.last?.kzt, 400 + 300 + 200 + 100)
+    XCTAssertEqual(CategoryBars.fit(Array(totals.prefix(4)), limit: 4).count, 4, "four fit: nothing merged")
+  }
+
   func testMoneyReadsLikeTheBanks() {
     XCTAssertEqual(Money.tenge(243_492.4), "243 492 ₸")
     XCTAssertEqual(Money.tenge(-204.5), "−205 ₸")  // rounds half away from zero
