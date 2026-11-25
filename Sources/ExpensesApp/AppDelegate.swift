@@ -7,11 +7,14 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let monitor = Monitor()
+  let updater = Updater()
   private var window: NSWindow?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.mainMenu = Self.mainMenu()
     monitor.start()
+    updater.windowOpen = { [weak self] in self?.window?.isVisible ?? false }
+    updater.start()
     // Started at login: stay in the background for the widget. Started by hand: show the window.
     if SMAppService.mainApp.status != .enabled { showWindow() }
   }
@@ -26,7 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   /// (⌘Tab, Mission Control), and goes back to the background when it closes.
   private func showWindow() {
     if window == nil {
-      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) {
+      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) { [updater] in
+        UpdateBanner(updater: updater)
         AddExpenseButton()
         LoginToggle()
       })
@@ -104,5 +108,28 @@ struct AddExpenseButton: View {
       Label("Add expense", systemImage: "plus")
     }
     .controlSize(.small)
+  }
+}
+
+/// The window's offer of a newer release; nothing shows while the app is current.
+struct UpdateBanner: View {
+  let updater: Updater
+
+  var body: some View {
+    switch updater.state {
+    case .idle:
+      EmptyView()
+    case .available(let version):
+      Button("Update to \(version)") { updater.install() }
+        .controlSize(.small)
+        .buttonStyle(.borderedProminent)
+    case .installing(let version):
+      HStack(spacing: 6) {
+        ProgressView().controlSize(.small)
+        Text("Installing \(version)…").font(.caption)
+      }
+    case .failed(let message):
+      Text(message).font(.caption).foregroundStyle(.red).lineLimit(1).help(message)
+    }
   }
 }

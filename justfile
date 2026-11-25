@@ -4,6 +4,7 @@
 sign_id := env("CODESIGN_ID", "Developer ID Application: Andrey Kim (73R36N2A46)")
 # The parser the app runs: expenses-capture's parse.js, the same file the phone and `just reparse` run.
 capture := env("EXPENSES_CAPTURE", "../expenses-capture")
+notarize_profile := env("NOTARIZE_PROFILE", "Notarize")
 app := "dist/Expenses.app"
 appex := app + "/Contents/PlugIns/ExpensesWidget.appex"
 
@@ -53,6 +54,36 @@ install: app
   # An app never opened is unknown to LaunchServices, and the widget gallery ignores its extension.
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R /Applications/Expenses.app
   pluginkit -a /Applications/Expenses.app/Contents/PlugIns/ExpensesWidget.appex
+
+# Release, as Batteries and LidGuard do: bump VERSION (BUMP=patch|minor|major), build with a secure
+# timestamp, notarize and staple, commit, tag, push, publish a GitHub release with the zip. Needs
+# RELEASE_NOTES.md. The installed app finds it there (Updater: every 12 h, offers it, never silent).
+release:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  test -f RELEASE_NOTES.md || { echo "Error: RELEASE_NOTES.md is required. Write release notes first."; exit 1; }
+  test -z "$(git status --porcelain -- . ':!RELEASE_NOTES.md')" || { echo "Error: commit your changes first."; exit 1; }
+  IFS=. read -r major minor patch < VERSION
+  case "${BUMP:-patch}" in
+    major) version="$((major + 1)).0.0" ;;
+    minor) version="$major.$((minor + 1)).0" ;;
+    *) version="$major.$minor.$((patch + 1))" ;;
+  esac
+  echo "$version" > VERSION
+  RELEASE=1 just app
+  ditto -c -k --keepParent "{{app}}" dist/notarize.zip
+  xcrun notarytool submit dist/notarize.zip --keychain-profile "{{notarize_profile}}" --wait
+  xcrun stapler staple "{{app}}"
+  rm -f dist/notarize.zip
+  zip="dist/Expenses-$version.zip"
+  ditto -c -k --keepParent "{{app}}" "$zip"
+  git add VERSION
+  git commit -m "chore: bump version to $version"
+  git tag "v$version"
+  git push origin main --tags
+  gh release create "v$version" "$zip" --repo Erel3/expenses --title "v$version" --notes-file RELEASE_NOTES.md
+  rm -f RELEASE_NOTES.md
+  echo "Released v$version"
 
 # Redraw the app icon set (Scripts/generate_icon.swift); `just icon preview.png` also writes a 1024 px PNG
 icon *preview:
