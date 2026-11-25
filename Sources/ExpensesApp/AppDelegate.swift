@@ -26,7 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   /// (⌘Tab, Mission Control), and goes back to the background when it closes.
   private func showWindow() {
     if window == nil {
-      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) { LoginToggle() })
+      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) {
+        AddExpenseButton()
+        LoginToggle()
+      })
       window.setFrameAutosaveName("Payments")
       window.delegate = self
       self.window = window
@@ -87,5 +90,19 @@ struct LoginToggle: View {
       self.error = error.localizedDescription
     }
     enabled = SMAppService.mainApp.status == .enabled
+  }
+}
+
+/// Runs the "Log Expense" shortcut rather than writing a payment itself: that shortcut is
+/// manual-Mac.json's one writer (iCloud keeps one device's version of a file, so two writers can
+/// lose a line). The window updates when the file changes.
+struct AddExpenseButton: View {
+  var body: some View {
+    Button {
+      NSWorkspace.shared.open(URL(string: "shortcuts://run-shortcut?name=Log%20Expense")!)
+    } label: {
+      Label("Add expense", systemImage: "plus")
+    }
+    .controlSize(.small)
   }
 }
