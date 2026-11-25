@@ -97,7 +97,9 @@ public struct PaymentsWindow<Footer: View>: View {
     let totals = Ledger.byCategory(inMonth)
     let hiddenInMonth = Ledger.inMonth(Ledger.payments(feed.pushes, includingHidden: true), month, calendar: calendar)
       .filter(\.isHidden)
-    let listed = showHidden ? (inMonth + hiddenInMonth) : inMonth
+    // Salary, own moves: in the list, greyed, out of every total (owner: "shown in whole list").
+    let greyed = Ledger.inMonth(Ledger.notSpending(feed.pushes), month, calendar: calendar)
+    let listed = (showHidden ? (inMonth + hiddenInMonth) : inMonth) + (category == nil ? greyed : [])
     let shown = category.map { picked in listed.filter { $0.shownCategory == picked } } ?? listed
     return List {
       Section {
@@ -265,9 +267,9 @@ public struct PaymentsWindow<Footer: View>: View {
           if push.isEdited {
             Image(systemName: "pencil").font(.caption2).foregroundStyle(.secondary).help("Corrected in the app")
           }
-          Text(Money.tenge(push.kzt ?? 0)).monospacedDigit()
+          Text(push.isNotSpending ? "+" + Money.tenge(push.kzt ?? 0) : Money.tenge(push.kzt ?? 0)).monospacedDigit()
             .strikethrough(push.isHidden)
-            .foregroundStyle((push.kzt ?? 0) < 0 ? .green : .primary)
+            .foregroundStyle((push.kzt ?? 0) < 0 || push.kind == "income" ? .green : .primary)
         }
         if let original = Money.original(push) {
           Text(original).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -275,7 +277,7 @@ public struct PaymentsWindow<Footer: View>: View {
       }
     }
     .padding(.vertical, 2)
-    .opacity(push.isHidden ? 0.45 : 1)
+    .opacity(push.isHidden || push.isNotSpending ? 0.45 : 1)
     .contentShape(Rectangle())
     .contextMenu { corrections(push) }
   }

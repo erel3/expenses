@@ -56,9 +56,13 @@ public enum Ledger {
   public static func raw(_ pushes: [Push]) -> [Push] { pushes.filter { !$0.isPayment && !$0.isHidden && $0.kind == nil } }
 
   /// Hidden payments never count, even when listed.
+  /// Hidden payments and greyed rows (salary, own moves) never count, even when listed.
   public static func total(_ payments: [Push]) -> Double {
-    payments.reduce(0) { $0 + ($1.isHidden ? 0 : $1.kzt ?? 0) }
+    payments.reduce(0) { $0 + ($1.isHidden || $1.kind != nil ? 0 : $1.kzt ?? 0) }
   }
+
+  /// Rows listed greyed beside the payments: money in and own moves (never counted).
+  public static func notSpending(_ pushes: [Push]) -> [Push] { pushes.filter { $0.isNotSpending && !$0.isHidden } }
 
   public static func inMonth(_ payments: [Push], _ month: Month, calendar: Calendar = .current) -> [Push] {
     payments.filter { $0.date.map { Month($0, calendar: calendar) == month } ?? false }

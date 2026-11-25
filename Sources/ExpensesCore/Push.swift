@@ -24,7 +24,8 @@ public struct Push: Codable, Hashable, Sendable {
   public var hidden: Bool?
   /// What corrections changed: "category", "amount".
   public var edited: [String]?
-  /// A statement row that is no spending: "income" (money in), "own" (between own accounts).
+  /// No spending, listed greyed: "income" (salary, ATM cash-in, other banks), "own" (the Kaspi
+  /// Deposit and own accounts, both ways). Money from a person is no kind: a payback, counted.
   public var kind: String?
   /// A statement row: the bank gives the day, not the time (unless a push was merged into it).
   public var dateOnly: Bool?
@@ -66,7 +67,9 @@ public struct Push: Codable, Hashable, Sendable {
 
   /// A payment is a push a parser understood; everything else (ads, transfers, failed attempts,
   /// formats nobody has a parser for yet) is a raw push.
-  public var isPayment: Bool { amount != nil }
+  public var isPayment: Bool { amount != nil && kind == nil }
+  /// Listed greyed, never counted: salary, other banks, own accounts and the Kaspi Deposit.
+  public var isNotSpending: Bool { amount != nil && kind != nil }
 
   /// `time` carries the phone's offset ("2026-11-20T16:19:56+05:00"); nil for an unreadable line.
   public var date: Date? { Push.parseTime(time) }
