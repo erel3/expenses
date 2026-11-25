@@ -16,21 +16,39 @@ final class PhoneModel {
   /// No usable folder yet: the app asks for iCloud Drive → Shortcuts.
   private(set) var needsFolder: Bool
   @ObservationIgnored private let parser: Result<Parser, Error> = Result { try Parser() }
-  @ObservationIgnored private var lastText: String?
+  @ObservationIgnored private var lastLoaded: Loaded?
 
   private init() {
     needsFolder = FolderAccess.folder() == nil
+    feed.apply = { [weak self] correction in self?.apply(correction) }
   }
 
   func choose(_ folder: URL) {
     do {
       try FolderAccess.remember(folder)
       needsFolder = false
-      lastText = nil
+      lastLoaded = nil
       read()
     } catch {
       feed.problem = "Cannot keep access to that folder: \(error.localizedDescription)"
     }
+  }
+
+  /// A correction from the list: appended to edits-iPhone.json (this app's one file in the folder),
+  /// then read again; the Mac sees it when iCloud brings the file over.
+  func apply(_ correction: Correction) {
+    guard let folder = FolderAccess.folder(), folder.startAccessingSecurityScopedResource() else {
+      feed.problem = "No access to the Shortcuts folder any more: choose it again"
+      return
+    }
+    defer { folder.stopAccessingSecurityScopedResource() }
+    do {
+      try correction.append(to: ICloud.editsFile(in: folder))
+    } catch {
+      feed.problem = "Cannot save the change: \(error.localizedDescription)"
+      return
+    }
+    read()
   }
 
   func read() {
@@ -51,43 +69,30 @@ final class PhoneModel {
       return
     }
     defer { folder.stopAccessingSecurityScopedResource() }
-    let files = ICloud.dataFiles(in: folder)
-    guard files.contains(where: { $0.lastPathComponent == "payments.json" }) else {
-      feed.problem = "No payments.json in this folder: choose iCloud Drive → Shortcuts"
+    let files = ICloud.files(in: folder)
+    guard !files.data.isEmpty else {
+      feed.problem = "No payments here: choose iCloud Drive → Shortcuts"
       return
     }
-    var texts: [String] = []
-    for file in files {
-      try? FileManager.default.startDownloadingUbiquitousItem(at: file)
-      do {
-        texts.append(try Self.coordinatedRead(file))
-      } catch {
-        feed.problem = "Cannot read \(file.lastPathComponent): \(error.localizedDescription)"
-        return
-      }
+    let loaded: Loaded
+    do {
+      loaded = try Library.load(files)
+    } catch {
+      feed.problem = error.localizedDescription
+      return
     }
-    let text = texts.joined(separator: "\n")
     feed.updated = .now
     do {
-      if text != lastText {
-        feed.pushes = try parser.reparse(text)
-        lastText = text
+      if loaded != lastLoaded {
+        feed.pushes = try parser.reparse(loaded.data, edits: loaded.edits)
+        feed.categories = parser.categories(edits: loaded.edits)
+        lastLoaded = loaded
       }
       feed.problem = nil
       handToWidget(feed.pushes)
     } catch {
       feed.problem = "\(error)"
     }
-  }
-
-  private static func coordinatedRead(_ file: URL) throws -> String {
-    var result: Result<String, Error> = .failure(CocoaError(.fileReadUnknown))
-    var coordinationError: NSError?
-    NSFileCoordinator().coordinate(readingItemAt: file, options: [], error: &coordinationError) { url in
-      result = Result { try String(contentsOf: url, encoding: .utf8) }
-    }
-    if let coordinationError { throw coordinationError }
-    return try result.get()
   }
 
   /// As on the Mac: the heartbeat is written every read, a reload is asked for only when the

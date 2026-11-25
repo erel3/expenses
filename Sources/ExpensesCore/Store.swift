@@ -1,24 +1,57 @@
 import Foundation
 
-/// Where the payments are: iCloud Drive → Shortcuts. payments.json is the phone automation's;
-/// manual-<device model>.json are the "Log Expense" shortcut's, one per device. Every file has one
-/// writer, and this app is none of them: only ever read.
+/// Where the payments are: iCloud Drive → Shortcuts → Expenses. `<device>-<year>.json` hold what
+/// that device captured (Log Payment, Log Expense), `archive-*.json` the lines of the old layout,
+/// `edits-<device>.json` the corrections that device's app made. Every file has one writer; this
+/// app writes only its own edits file.
 public enum ICloud {
-  public static var folder: URL {
+  /// iCloud Drive → Shortcuts (the folder the iPhone app asks for; picking Expenses works too).
+  public static var shortcuts: URL {
     URL(filePath: NSHomeDirectory()).appending(path: "Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents")
   }
 
-  public static var payments: URL { folder.appending(path: "payments.json") }
+  /// The Expenses folder inside a picked folder: the picked one itself when it is Expenses.
+  public static func expenses(in picked: URL = shortcuts) -> URL {
+    picked.lastPathComponent == "Expenses" ? picked : picked.appending(path: "Expenses")
+  }
 
-  /// payments.json first, then the manual files by name, whichever exist. A file iCloud evicted
-  /// shows as ".<name>.icloud" and counts under its real name, so it can be asked for.
-  public static func dataFiles(in folder: URL = folder) -> [URL] {
+  #if os(iOS)
+  public static let device = "iPhone"
+  #else
+  public static let device = "Mac"
+  #endif
+
+  /// This device's corrections file: the one file of the folder this app writes.
+  public static func editsFile(in picked: URL = shortcuts) -> URL {
+    expenses(in: picked).appending(path: "edits-\(device).json")
+  }
+
+  public struct Files: Equatable {
+    public var data: [URL]
+    public var edits: [URL]
+  }
+
+  /// What to read: captured lines (the Expenses folder's data files, plus payments.json and
+  /// manual-*.json left in Shortcuts by the old layout until they are archived) and corrections.
+  /// A file iCloud evicted shows as ".<name>.icloud" and counts under its real name, so it can be
+  /// asked for.
+  public static func files(in picked: URL = shortcuts) -> Files {
+    let folder = expenses(in: picked)
+    let root = folder.deletingLastPathComponent()
+    let legacy = names(in: root).filter { $0 == "payments.json" || ($0.hasPrefix("manual-") && $0.hasSuffix(".json")) }
+    let current = names(in: folder).filter { $0.hasSuffix(".json") && $0 != "upload.json" }
+    return Files(
+      data: legacy.map { root.appending(path: $0) }
+        + current.filter { !$0.hasPrefix("edits-") }.map { folder.appending(path: $0) },
+      edits: current.filter { $0.hasPrefix("edits-") }.map { folder.appending(path: $0) }
+    )
+  }
+
+  private static func names(in folder: URL) -> [String] {
     let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-    let real = Set(names.map { name in
+    return Set(names.map { name in
       name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(".icloud".count)) : name
-    })
-    let manual = real.filter { $0.hasPrefix("manual-") && $0.hasSuffix(".json") }.sorted()
-    return ((real.contains("payments.json") ? ["payments.json"] : []) + manual).map { folder.appending(path: $0) }
+    }).sorted()
   }
 }
 

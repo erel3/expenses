@@ -39,11 +39,17 @@ public struct Day: Hashable, Sendable {
 /// Sums over parsed pushes. Every figure is in tenge (`kzt`); a foreign payment the bank printed no
 /// tenge for counts 0 and still shows in lists.
 public enum Ledger {
-  public static func payments(_ pushes: [Push]) -> [Push] { pushes.filter(\.isPayment) }
+  /// Payments that count: hidden ones are left out unless asked for (the window's "Show hidden").
+  public static func payments(_ pushes: [Push], includingHidden: Bool = false) -> [Push] {
+    pushes.filter { $0.isPayment && (includingHidden || !$0.isHidden) }
+  }
 
-  public static func raw(_ pushes: [Push]) -> [Push] { pushes.filter { !$0.isPayment } }
+  public static func raw(_ pushes: [Push]) -> [Push] { pushes.filter { !$0.isPayment && !$0.isHidden } }
 
-  public static func total(_ payments: [Push]) -> Double { payments.reduce(0) { $0 + ($1.kzt ?? 0) } }
+  /// Hidden payments never count, even when listed.
+  public static func total(_ payments: [Push]) -> Double {
+    payments.reduce(0) { $0 + ($1.isHidden ? 0 : $1.kzt ?? 0) }
+  }
 
   public static func inMonth(_ payments: [Push], _ month: Month, calendar: Calendar = .current) -> [Push] {
     payments.filter { $0.date.map { Month($0, calendar: calendar) == month } ?? false }

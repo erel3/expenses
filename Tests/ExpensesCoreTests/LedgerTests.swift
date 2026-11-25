@@ -67,13 +67,51 @@ final class LedgerTests: XCTestCase {
     XCTAssertEqual(Snapshot(pushes: pushes, now: now).updated, now)
   }
 
-  func testDataFilesArePaymentsThenEveryDevicesManualFile() throws {
-    let folder = FileManager.default.temporaryDirectory.appending(path: "expenses-\(UUID())")
+  func testFilesAreTheExpensesFolderPlusTheOldLayoutUntilArchived() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "expenses-\(UUID())")
+    let folder = root.appending(path: "Expenses")
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: folder) }
-    for name in ["payments.json", "manual-Mac.json", ".manual-iPhone.json.icloud", "upload.json", "Log Payment.shortcut"] {
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["payments.json", "manual-iPhone.json", "Log Payment.shortcut"] {
+      try Data().write(to: root.appending(path: name))
+    }
+    for name in ["iPhone-2026.json", ".Mac-2026.json.icloud", "archive-2026.json", "edits-Mac.json", "upload.json"] {
       try Data().write(to: folder.appending(path: name))
     }
-    XCTAssertEqual(ICloud.dataFiles(in: folder).map(\.lastPathComponent), ["payments.json", "manual-Mac.json", "manual-iPhone.json"])
+    let files = ICloud.files(in: root)
+    XCTAssertEqual(files.data.map(\.lastPathComponent),
+                   ["manual-iPhone.json", "payments.json", "Mac-2026.json", "archive-2026.json", "iPhone-2026.json"])
+    XCTAssertEqual(files.edits.map(\.lastPathComponent), ["edits-Mac.json"])
+    XCTAssertEqual(ICloud.files(in: folder), files, "picking Expenses itself works the same")
+    XCTAssertEqual(ICloud.editsFile(in: root).lastPathComponent, "edits-Mac.json")
+  }
+
+  func testCorrectionsApplyThroughJavaScriptCore() throws {
+    let parser = try Parser(script: String(contentsOf: Fixtures.parseJS, encoding: .utf8))
+    let plain = try parser.reparse(Fixtures.text)
+    let wolt = try XCTUnwrap(plain.first { $0.merchant == "WOLT.COM" })
+    let shop = try XCTUnwrap(plain.first { $0.merchant == "SOME SHOP" })
+    let at = Fixtures.date("2026-11-25T12:00:00+05:00")
+    let edits = [
+      Correction.category(id: try XCTUnwrap(wolt.id), value: "delivery").line(at: at),
+      Correction.hide(id: try XCTUnwrap(shop.id)).line(at: at),
+      Correction.merchantCategory(merchant: "YANDEX.GO", value: "taxi").line(at: at)
+    ].joined(separator: "\n")
+    let pushes = try parser.reparse(Fixtures.text, edits: edits)
+    XCTAssertEqual(pushes.first { $0.id == wolt.id }?.category, "delivery")
+    XCTAssertEqual(pushes.first { $0.id == wolt.id }?.edited, ["category"])
+    XCTAssertTrue(pushes.first { $0.id == shop.id }?.isHidden ?? false)
+    XCTAssertEqual(Set(pushes.filter { $0.merchant == "YANDEX.GO" }.map(\.category)), ["taxi"])
+    XCTAssertFalse(Ledger.payments(pushes).contains { $0.id == shop.id }, "hidden is out of totals")
+    XCTAssertEqual(parser.categories(edits: edits), ["transport", "food", "subscriptions", "delivery", "taxi", "other"])
+  }
+
+  func testACorrectionLineIsWhatParseJSReads() throws {
+    let at = Fixtures.date("2026-11-25T12:00:00+05:00")
+    let line = Correction.amount(id: "abc", value: 950).line(at: at)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+    XCTAssertEqual(object["edit"] as? String, "amount")
+    XCTAssertEqual(object["value"] as? Double, 950)
+    XCTAssertNotNil(Push.parseTime(try XCTUnwrap(object["time"] as? String)))
   }
 }

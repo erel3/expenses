@@ -9,11 +9,17 @@ public final class Feed {
   /// Why the last read failed, shown in the window's footer; nil when it worked.
   public var problem: String?
   public var updated: Date?
+  /// The categories a correction can pick: parse.js's table, the ones corrections created, other.
+  public var categories: [String]
+  /// Saves a correction (the app appends it to its edits file and reads again); nil: read only.
+  @ObservationIgnored public var apply: ((Correction) -> Void)?
 
-  public init(pushes: [Push] = [], problem: String? = nil, updated: Date? = nil) {
+  public init(pushes: [Push] = [], problem: String? = nil, updated: Date? = nil,
+              categories: [String] = ["food", "transport", "subscriptions", "other"]) {
     self.pushes = pushes
     self.problem = problem
     self.updated = updated
+    self.categories = categories
   }
 }
 
@@ -26,6 +32,18 @@ public struct PaymentsWindow<Footer: View>: View {
   @State private var month: Month
   @State private var category: String?
   @State private var tab: Tab
+  @State private var showHidden = false
+  /// The payment (and scope) a new category is being typed for.
+  @State private var naming: Naming?
+  @State private var newCategory = ""
+  /// The payment whose tenge is being corrected.
+  @State private var fixing: Push?
+  @State private var amountText = ""
+
+  struct Naming {
+    let push: Push
+    let everyPayment: Bool
+  }
 
   enum Tab { case payments, raw }
 
@@ -77,7 +95,10 @@ public struct PaymentsWindow<Footer: View>: View {
     let all = Ledger.payments(feed.pushes)
     let inMonth = Ledger.inMonth(all, month, calendar: calendar)
     let totals = Ledger.byCategory(inMonth)
-    let shown = category.map { picked in inMonth.filter { $0.shownCategory == picked } } ?? inMonth
+    let hiddenInMonth = Ledger.inMonth(Ledger.payments(feed.pushes, includingHidden: true), month, calendar: calendar)
+      .filter(\.isHidden)
+    let listed = showHidden ? (inMonth + hiddenInMonth) : inMonth
+    let shown = category.map { picked in listed.filter { $0.shownCategory == picked } } ?? listed
     return List {
       Section {
         VStack(alignment: .leading, spacing: 12) {
@@ -94,6 +115,11 @@ public struct PaymentsWindow<Footer: View>: View {
           }
           FlowLayout(spacing: 8) {
             ForEach(totals, id: \.category) { total in chip(total) }
+          }
+          if !hiddenInMonth.isEmpty {
+            Toggle("Show hidden (\(hiddenInMonth.count))", isOn: $showHidden)
+              .font(.caption)
+              .foregroundStyle(.secondary)
           }
         }
         .listRowSeparator(.hidden)
@@ -119,6 +145,78 @@ public struct PaymentsWindow<Footer: View>: View {
     }
     .listStyle(.inset)
     .onChange(of: month) { category = nil }
+    .alert("New category", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+      TextField("Name, e.g. health", text: $newCategory)
+      Button("Cancel", role: .cancel) { naming = nil }
+      Button("Save") {
+        let name = newCategory.trimmingCharacters(in: .whitespaces).lowercased()
+        if let naming, !name.isEmpty { setCategory(name, of: naming.push, everyPayment: naming.everyPayment) }
+        naming = nil
+      }
+    } message: {
+      Text(naming.map { $0.everyPayment ? "For every \(merchantName($0.push)) payment" : "For this payment only" } ?? "")
+    }
+    .alert("Fix amount", isPresented: Binding(get: { fixing != nil }, set: { if !$0 { fixing = nil } })) {
+      TextField("Tenge", text: $amountText)
+      Button("Cancel", role: .cancel) { fixing = nil }
+      Button("Save") {
+        let value = Double(amountText.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: "."))
+        if let fixing, let id = fixing.id, let value { feed.apply?(.amount(id: id, value: value)) }
+        fixing = nil
+      }
+    } message: {
+      Text(fixing.map { "\(merchantName($0)): \(Money.tenge($0.kzt ?? 0)) now" } ?? "")
+    }
+  }
+
+  // MARK: Corrections
+
+  private func merchantName(_ push: Push) -> String {
+    push.merchant.flatMap { $0.isEmpty ? nil : $0 } ?? push.title
+  }
+
+  private func setCategory(_ value: String, of push: Push, everyPayment: Bool) {
+    if everyPayment, let merchant = push.merchant, !merchant.isEmpty {
+      feed.apply?(.merchantCategory(merchant: merchant.uppercased(), value: value))
+    } else if let id = push.id {
+      feed.apply?(.category(id: id, value: value))
+    }
+  }
+
+  /// Right click on the Mac, a long press on the iPhone. Nothing captured is ever changed: each
+  /// choice is a correction line, hiding included (undone by Unhide).
+  @ViewBuilder
+  private func corrections(_ push: Push) -> some View {
+    if feed.apply != nil, push.id != nil {
+      ForEach([false, true], id: \.self) { every in
+        if !every || !(push.merchant ?? "").isEmpty {
+          Menu(every ? "Category for every \(merchantName(push))" : "Category for this payment") {
+            ForEach(feed.categories, id: \.self) { name in
+              Button {
+                setCategory(name, of: push, everyPayment: every)
+              } label: {
+                if name == push.shownCategory { Label(name.capitalized, systemImage: "checkmark") } else { Text(name.capitalized) }
+              }
+            }
+            Divider()
+            Button("New category…") {
+              newCategory = ""
+              naming = Naming(push: push, everyPayment: every)
+            }
+          }
+        }
+      }
+      Button("Fix amount…") {
+        amountText = String(Int((push.kzt ?? 0).rounded()))
+        fixing = push
+      }
+      Divider()
+      if push.isHidden {
+        Button("Unhide") { if let id = push.id { feed.apply?(.unhide(id: id)) } }
+      } else {
+        Button("Hide", role: .destructive) { if let id = push.id { feed.apply?(.hide(id: id)) } }
+      }
+    }
   }
 
   private func chip(_ total: CategoryTotal) -> some View {
@@ -149,14 +247,23 @@ public struct PaymentsWindow<Footer: View>: View {
       }
       Spacer()
       VStack(alignment: .trailing, spacing: 2) {
-        Text(Money.tenge(push.kzt ?? 0)).monospacedDigit()
-          .foregroundStyle((push.kzt ?? 0) < 0 ? .green : .primary)
+        HStack(spacing: 4) {
+          if push.isEdited {
+            Image(systemName: "pencil").font(.caption2).foregroundStyle(.secondary).help("Corrected in the app")
+          }
+          Text(Money.tenge(push.kzt ?? 0)).monospacedDigit()
+            .strikethrough(push.isHidden)
+            .foregroundStyle((push.kzt ?? 0) < 0 ? .green : .primary)
+        }
         if let original = Money.original(push) {
           Text(original).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
       }
     }
     .padding(.vertical, 2)
+    .opacity(push.isHidden ? 0.45 : 1)
+    .contentShape(Rectangle())
+    .contextMenu { corrections(push) }
   }
 
   // MARK: Raw

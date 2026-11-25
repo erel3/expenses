@@ -12,12 +12,13 @@ final class ParserTests: XCTestCase {
     // 11 lines: one probe and one repeated debit dropped.
     XCTAssertEqual(pushes.count, 9)
     let payments = Ledger.payments(pushes)
-    XCTAssertEqual(payments.map(\.merchant), ["WOLT.COM", "WOLT.COM", "FACEIT", "YANDEX.GO", "Arbuz.kz", "SOME SHOP", "YANDEX.GO"])
-    XCTAssertEqual(payments.map(\.kzt), [5572.22, -204.5, 43674.3, 3210, 18078, 12722, 1000])
-    XCTAssertEqual(payments[2].amount, 95.88)
-    XCTAssertEqual(payments[2].currency, "$")
-    XCTAssertEqual(payments[5].shownCategory, "other")
-    XCTAssertEqual(Ledger.raw(pushes).map(\.title), ["Кешбэк за покупку", "Presale is live"])
+    // Time order across files: the October line comes first although it is near the file's end.
+    XCTAssertEqual(payments.map(\.merchant), ["YANDEX.GO", "WOLT.COM", "WOLT.COM", "FACEIT", "YANDEX.GO", "Arbuz.kz", "SOME SHOP"])
+    XCTAssertEqual(payments.map(\.kzt), [1000, 5572.22, -204.5, 43674.3, 3210, 18078, 12722])
+    XCTAssertEqual(payments[3].amount, 95.88)
+    XCTAssertEqual(payments[3].currency, "$")
+    XCTAssertEqual(payments[6].shownCategory, "other")
+    XCTAssertEqual(Ledger.raw(pushes).map(\.title), ["Presale is live", "Кешбэк за покупку"])
   }
 
   func testAnUnreadableLineIsARawPushNotAFailure() throws {

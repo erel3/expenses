@@ -19,6 +19,7 @@ public enum ParserError: Error, CustomStringConvertible {
 public final class Parser {
   private let context: JSContext
   private let reparseLines: JSValue
+  private let categoriesFunction: JSValue
 
   public init(script: String) throws {
     guard let context = JSContext() else { throw ParserError.script("no JavaScript context") }
@@ -31,6 +32,7 @@ public final class Parser {
     }
     self.context = context
     self.reparseLines = function
+    self.categoriesFunction = context.objectForKeyedSubscript("categories")
   }
 
   /// The parse.js `just app` copies into the bundle's Resources.
@@ -41,16 +43,22 @@ public final class Parser {
     try self.init(script: String(contentsOf: url, encoding: .utf8))
   }
 
-  /// The whole payments.json text -> every push, oldest first, probes and repeats dropped.
-  public func reparse(_ text: String) throws -> [Push] {
+  /// Every data file's text joined -> every push, oldest first, probes and repeats dropped, the
+  /// corrections in `edits` (every edits file's text joined) applied.
+  public func reparse(_ text: String, edits: String = "") throws -> [Push] {
     var thrown: String?
     context.exceptionHandler = { _, value in thrown = value?.toString() }
-    let result = reparseLines.call(withArguments: [text])
+    let result = reparseLines.call(withArguments: [text, edits])
     let json = context.objectForKeyedSubscript("JSON").invokeMethod("stringify", withArguments: [result as Any])
     if let thrown { throw ParserError.result(thrown) }
     guard let json, json.isString, let data = json.toString().data(using: .utf8) else {
       throw ParserError.result("no JSON came back")
     }
     return try JSONDecoder().decode([Push].self, from: data)
+  }
+
+  /// Every category in use: parse.js's table, the ones corrections gave, then "other".
+  public func categories(edits: String = "") -> [String] {
+    categoriesFunction.call(withArguments: [edits])?.toArray()?.compactMap { $0 as? String } ?? ["other"]
   }
 }

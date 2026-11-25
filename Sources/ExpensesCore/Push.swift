@@ -18,10 +18,17 @@ public struct Push: Codable, Hashable, Sendable {
   /// "" when parse.js has no category for the merchant.
   public var category: String?
   public var error: String?
+  /// A hash of what was received (parse.js `pushId`): what corrections point at.
+  public var id: String?
+  /// Hidden by a correction: out of every total, listed only on request.
+  public var hidden: Bool?
+  /// What corrections changed: "category", "amount".
+  public var edited: [String]?
 
   public init(time: String, app: String, title: String, subtitle: String? = nil, body: String,
               amount: Double? = nil, currency: String? = nil, kzt: Double? = nil,
-              merchant: String? = nil, category: String? = nil, error: String? = nil) {
+              merchant: String? = nil, category: String? = nil, error: String? = nil,
+              id: String? = nil, hidden: Bool? = nil, edited: [String]? = nil) {
     self.time = time
     self.app = app
     self.title = title
@@ -33,7 +40,13 @@ public struct Push: Codable, Hashable, Sendable {
     self.merchant = merchant
     self.category = category
     self.error = error
+    self.id = id
+    self.hidden = hidden
+    self.edited = edited
   }
+
+  public var isHidden: Bool { hidden == true }
+  public var isEdited: Bool { !(edited ?? []).isEmpty }
 
   /// A payment is a push a parser understood; everything else (ads, transfers, failed attempts,
   /// formats nobody has a parser for yet) is a raw push.

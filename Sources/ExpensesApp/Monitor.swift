@@ -18,10 +18,12 @@ final class Monitor {
   private let parser: Result<Parser, Error>
   private var presenter: Presenter?
   private var timer: Timer?
-  private var lastText: String?
+  private var lastLoaded: Loaded?
   private var lastSnapshot: Snapshot?
 
-  init(folder: URL = ICloud.folder) {
+  /// `folder`: iCloud Drive → Shortcuts; the data is in its Expenses folder (and, until archived,
+  /// the old layout's files in Shortcuts itself), so the presenter watches all of it.
+  init(folder: URL = ICloud.shortcuts) {
     self.folder = folder
     parser = Result { try Parser() }
   }
@@ -39,9 +41,21 @@ final class Monitor {
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in self?.read() }
     }
+    feed.apply = { [weak self] correction in self?.apply(correction) }
     // A newly installed widget has no timeline until its app asks for one.
     WidgetCenter.shared.reloadAllTimelines()
     read()
+  }
+
+  /// A correction from the window: appended to edits-Mac.json (this app's one file), then read
+  /// again so the window, the widget and the iPhone (through iCloud) all see it.
+  func apply(_ correction: Correction) {
+    do {
+      try correction.append(to: ICloud.editsFile(in: folder))
+      read()
+    } catch {
+      feed.problem = "Cannot save the change: \(error.localizedDescription)"
+    }
   }
 
   func read() {
@@ -52,50 +66,36 @@ final class Monitor {
       feed.problem = "\(error)"
       return
     }
-    let files = ICloud.dataFiles(in: folder)
-    guard !files.isEmpty else {
-      feed.problem = "No payments.json in iCloud Drive → Shortcuts yet"
+    let files = ICloud.files(in: folder)
+    guard !files.data.isEmpty else {
+      feed.problem = "No payments in iCloud Drive → Shortcuts → Expenses yet"
       return
     }
-    // One reparseLines over all files together, as reparse.mjs does: the duplicate rule and the
-    // numbers stay the same as `just reparse`.
-    var texts: [String] = []
-    for file in files {
-      // A file "Optimize Mac Storage" evicted is only a placeholder until asked for.
-      try? FileManager.default.startDownloadingUbiquitousItem(at: file)
-      do {
-        texts.append(try coordinatedRead(file))
-      } catch {
-        feed.problem = "Cannot read \(file.lastPathComponent): \(error.localizedDescription)"
-        return
-      }
+    // One reparseLines over all files together, as reparse.mjs does: the duplicate rule, the
+    // corrections and the numbers stay the same as `just reparse`.
+    let loaded: Loaded
+    do {
+      loaded = try Library.load(files, presenter: presenter)
+    } catch {
+      feed.problem = error.localizedDescription
+      return
     }
-    let text = texts.joined(separator: "\n")
     feed.updated = .now
-    guard text != lastText else {
+    guard loaded != lastLoaded else {
       feed.problem = nil
       handToWidget(feed.pushes)  // the heartbeat
       return
     }
     do {
-      let pushes = try parser.reparse(text)
-      lastText = text
+      let pushes = try parser.reparse(loaded.data, edits: loaded.edits)
+      lastLoaded = loaded
       feed.pushes = pushes
+      feed.categories = parser.categories(edits: loaded.edits)
       feed.problem = nil
       handToWidget(pushes)
     } catch {
       feed.problem = "\(error)"
     }
-  }
-
-  private func coordinatedRead(_ file: URL) throws -> String {
-    var result: Result<String, Error> = .failure(CocoaError(.fileReadUnknown))
-    var coordinationError: NSError?
-    NSFileCoordinator(filePresenter: presenter).coordinate(readingItemAt: file, options: [], error: &coordinationError) { url in
-      result = Result { try String(contentsOf: url, encoding: .utf8) }
-    }
-    if let coordinationError { throw coordinationError }
-    return try result.get()
   }
 
   /// Written on every read, so `updated` beats while the app runs. WidgetKit rations reloads: one
