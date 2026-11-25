@@ -32,9 +32,15 @@ public struct Snapshot: Codable, Equatable, Sendable {
   /// payments it shows may be missing new ones. Nil when no app ever wrote one.
   public var updated: Date?
 
-  /// How old `updated` may get before the widget calls its numbers stale: the app re-reads every
-  /// 15 minutes and on wake, so twice that plus slack never fires while it runs.
+  /// How old `updated` may get before the widget calls its numbers stale. The Mac app re-reads
+  /// every 15 minutes and on wake, so twice that plus slack never fires while it runs. The iPhone
+  /// app reads only when opened or when a shortcut runs its Refresh action, so a quiet afternoon
+  /// is normal there: a day.
+  #if os(iOS)
+  public static let staleAfter: TimeInterval = 24 * 3600
+  #else
   public static let staleAfter: TimeInterval = 45 * 60
+  #endif
 
   public init(payments: [Push] = [], updated: Date? = nil) {
     self.payments = payments
@@ -73,7 +79,13 @@ public struct Snapshot: Codable, Equatable, Sendable {
 }
 
 public enum Store {
+  /// iOS accepts only the `group.` form; the Mac app predates the iPhone and keeps its team-prefixed
+  /// group (both are fine on macOS for a Developer ID app).
+  #if os(iOS)
+  public static let appGroup = "group.com.akim.expenses"
+  #else
   public static let appGroup = "73R36N2A46.com.akim.expenses"
+  #endif
 
   /// Only the signed app and widget touch this folder: macOS 15+ asks the user before an unsigned
   /// process reads another app's group container. `containerURL` returns a path even without the

@@ -67,3 +67,32 @@ lint:
 
 clean:
   rm -rf .build dist
+
+# ── iPhone ───────────────────────────────────────────────────────────
+
+# Generate iOS/Expenses.xcodeproj from iOS/project.yml (XcodeGen; the project is not committed)
+ios-project:
+  cd iOS && xcodegen generate --quiet
+
+# The paired iPhone's id, read from devicectl, never hardcoded
+_iphone:
+  @xcrun devicectl list devices 2>/dev/null | awk '/available \(paired\)/ && /iPhone/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i; exit }'
+
+# Build for the paired iPhone. Needs an Apple Development certificate in Xcode → Settings → Accounts.
+ios-build: ios-project
+  #!/usr/bin/env bash
+  set -euo pipefail
+  test -f "{{capture}}/parse.js" || { echo "no {{capture}}/parse.js: build from the expenses workspace"; exit 1; }
+  device=$(just _iphone)
+  test -n "$device" || { echo "no paired iPhone (xcrun devicectl list devices)"; exit 1; }
+  xcodebuild -project iOS/Expenses.xcodeproj -scheme ExpensesPhone -configuration Release \
+    -destination "id=$device" -derivedDataPath .build/ios -allowProvisioningUpdates build | tail -3
+
+# Owner only: install the last ios-build on the paired iPhone
+ios-install:
+  xcrun devicectl device install app --device "$(just _iphone)" .build/ios/Build/Products/Release-iphoneos/Expenses.app
+
+# Simulator build, unsigned: checks the iPhone target compiles without a certificate
+ios-check: ios-project
+  xcodebuild -project iOS/Expenses.xcodeproj -scheme ExpensesPhone -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build | tail -1

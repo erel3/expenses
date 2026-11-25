@@ -5,9 +5,10 @@ let swift6: [SwiftSetting] = [.swiftLanguageMode(.v6)]
 
 let package = Package(
   name: "Expenses",
-  platforms: [.macOS(.v15)],
+  platforms: [.macOS(.v15), .iOS(.v18)],
   products: [
     .library(name: "ExpensesCore", targets: ["ExpensesCore"]),
+    .library(name: "ExpensesUI", targets: ["ExpensesUI"]),
     .executable(name: "ExpensesApp", targets: ["ExpensesApp"]),
     .executable(name: "ExpensesWidget", targets: ["ExpensesWidget"])
   ],

@@ -1,0 +1,77 @@
+# The iPhone app and widget. `just ios-project` generates Expenses.xcodeproj from this file (the
+# project itself is not committed). The code is shared with the Mac through the local package:
+# ExpensesCore (payments, parse.js in JavaScriptCore, sums) and ExpensesUI (widget and list views);
+# the widget target compiles the Mac widget's own source.
+name: Expenses
+options:
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: 73R36N2A46
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+packages:
+  Expenses:
+    path: ..
+targets:
+  ExpensesPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: Phone
+      - path: Assets.xcassets
+      # The one parser the phone automation, `just reparse` and the Mac app also run.
+      - path: ../../expenses-capture/parse.js
+        buildPhase: resources
+    info:
+      path: Phone/Info.plist
+      properties:
+        CFBundleDisplayName: Expenses
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Phone/Phone.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.akim.expenses]
+    settings:
+      base:
+        # The Mac app's id too: a shortcut action names one app on both devices.
+        PRODUCT_BUNDLE_IDENTIFIER: com.akim.expenses
+        PRODUCT_NAME: Expenses
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: Expenses
+        product: ExpensesCore
+      - package: Expenses
+        product: ExpensesUI
+      - target: ExpensesPhoneWidget
+  ExpensesPhoneWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../Sources/ExpensesWidget
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Expenses
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/Widget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.akim.expenses]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.akim.expenses.widget
+        PRODUCT_NAME: ExpensesWidget
+    dependencies:
+      - package: Expenses
+        product: ExpensesCore
+      - package: Expenses
+        product: ExpensesUI

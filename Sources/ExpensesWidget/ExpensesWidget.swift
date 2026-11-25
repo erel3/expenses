@@ -50,9 +50,13 @@ struct EntryView: View {
 
   var body: some View {
     ExpensesWidgetView(payments: entry.snapshot.payments, family: family, now: entry.date, updated: entry.snapshot.updated)
+      #if os(iOS)
+      .containerBackground(.background, for: .widget)
+      #else
       // Other apps' widgets cannot get macOS 27's Liquid Glass; materials and translucent colours
       // come out the same grey (Batteries, 2026-11-21). The system's own background it is.
       .containerBackground(for: .widget) { Color.clear }
+      #endif
   }
 }
 
