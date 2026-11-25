@@ -126,7 +126,10 @@ ios-build: ios-project
     -exportPath .build/ios/export -allowProvisioningUpdates | tail -2
   ls .build/ios/export/*.ipa
 
-# Owner only: install the last ios-build on the paired iPhone (connected, unlocked)
+# Owner only: install the last ios-build on the paired iPhone (connected, unlocked). devicectl
+# installs through the developer services, and iOS then requires Developer Mode to OPEN the app,
+# Ad Hoc signature or not (seen 2026-11-25). To keep Developer Mode off, install the .ipa from
+# Finder instead: iPhone in the sidebar, drag .build/ios/export/Expenses.ipa onto its window.
 ios-install:
   #!/usr/bin/env bash
   set -euo pipefail
