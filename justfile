@@ -110,19 +110,29 @@ ios-project:
 _iphone:
   @xcrun devicectl list devices 2>/dev/null | awk '/iPhone/ && /physical/ && !/unavailable/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i; exit }'
 
-# Build for the paired iPhone. Needs an Apple Development certificate in Xcode → Settings → Accounts.
+# Build an Ad Hoc .ipa for the registered iPhone: archive, then export signed for "release-testing".
+# Ad Hoc runs without Developer Mode (a development build would not open with it off), one year per
+# profile, never published. The first run registers the paired iPhone in the team (it has to be
+# connected and unlocked then) and creates the profiles; later runs need no device at all.
 ios-build: ios-project
   #!/usr/bin/env bash
   set -euo pipefail
   test -f "{{capture}}/parse.js" || { echo "no {{capture}}/parse.js: build from the expenses workspace"; exit 1; }
-  device=$(just _iphone)
-  test -n "$device" || { echo "no paired iPhone (xcrun devicectl list devices)"; exit 1; }
+  rm -rf .build/ios/Expenses.xcarchive .build/ios/export
   xcodebuild -project iOS/Expenses.xcodeproj -scheme ExpensesPhone -configuration Release \
-    -destination "id=$device" -derivedDataPath .build/ios -allowProvisioningUpdates -allowProvisioningDeviceRegistration build | tail -3
+    -destination 'generic/platform=iOS' -derivedDataPath .build/ios -archivePath .build/ios/Expenses.xcarchive \
+    -allowProvisioningUpdates -allowProvisioningDeviceRegistration archive | tail -2
+  xcodebuild -exportArchive -archivePath .build/ios/Expenses.xcarchive -exportOptionsPlist iOS/ExportOptions.plist \
+    -exportPath .build/ios/export -allowProvisioningUpdates | tail -2
+  ls .build/ios/export/*.ipa
 
-# Owner only: install the last ios-build on the paired iPhone
+# Owner only: install the last ios-build on the paired iPhone (connected, unlocked)
 ios-install:
-  xcrun devicectl device install app --device "$(just _iphone)" .build/ios/Build/Products/Release-iphoneos/Expenses.app
+  #!/usr/bin/env bash
+  set -euo pipefail
+  device=$(just _iphone)
+  test -n "$device" || { echo "no connected iPhone (xcrun devicectl list devices)"; exit 1; }
+  xcrun devicectl device install app --device "$device" .build/ios/export/Expenses.ipa | tail -2
 
 # Simulator build, unsigned: checks the iPhone target compiles without a certificate
 ios-check: ios-project

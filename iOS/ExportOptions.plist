@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Ad Hoc ("release-testing"): runs on the registered iPhone without Developer Mode, a year per
+       profile, never published. A development build would need Developer Mode on to open. -->
+  <key>method</key>
+  <string>release-testing</string>
+  <key>teamID</key>
+  <string>73R36N2A46</string>
+  <key>signingStyle</key>
+  <string>automatic</string>
+  <key>compileBitcode</key>
+  <false/>
+  <key>thinning</key>
+  <string>&lt;none&gt;</string>
+</dict>
+</plist>

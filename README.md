@@ -14,7 +14,7 @@ iCloud Drive. The file is only ever read here; the phone is its one writer.
 - **One parser**: the app runs expenses-capture's `parse.js` in JavaScriptCore, the same file the
   phone runs, so both always agree.
 - Runs in the background to keep the widget current; the Dock icon shows only while the window is
-  open. Tick *Open at login* in the window, or the widget stops updating after a restart.
+  open. Turn on *Open at Login* in the window's gear menu, or the widget stops updating after a restart.
 
 ## Build
 

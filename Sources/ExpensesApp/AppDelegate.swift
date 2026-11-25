@@ -7,14 +7,12 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let monitor = Monitor()
-  let updater = Updater()
   private var window: NSWindow?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.mainMenu = Self.mainMenu()
     monitor.start()
-    updater.windowOpen = { [weak self] in self?.window?.isVisible ?? false }
-    updater.start()
+    Updater.shared.start()
     // Started at login: stay in the background for the widget. Started by hand: show the window.
     if SMAppService.mainApp.status != .enabled { showWindow() }
   }
@@ -29,10 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   /// (⌘Tab, Mission Control), and goes back to the background when it closes.
   private func showWindow() {
     if window == nil {
-      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) { [updater] in
-        UpdateBanner(updater: updater)
+      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) {
         AddExpenseButton()
-        LoginToggle()
+        SettingsMenu()
       })
       window.setFrameAutosaveName("Payments")
       window.delegate = self
@@ -72,28 +69,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
 }
 
-/// The widget stays current only while the app runs, so it offers to start at login.
-struct LoginToggle: View {
-  @State private var enabled = SMAppService.mainApp.status == .enabled
+/// The window's settings, as Batteries' General pane has them: start at login (the widget stays
+/// current only while the app runs), update checks, the project page.
+struct SettingsMenu: View {
+  @State private var openAtLogin = SMAppService.mainApp.status == .enabled
+  @State private var checksForUpdates = Updater.shared.checksAutomatically
   @State private var error: String?
 
   var body: some View {
     HStack(spacing: 8) {
-      if let error { Text(error).font(.caption).foregroundStyle(.red) }
-      Toggle("Open at login", isOn: Binding(get: { enabled }, set: set))
-        .toggleStyle(.checkbox)
-        .font(.caption)
+      if let error { Text(error).font(.caption).foregroundStyle(.red).lineLimit(1).help(error) }
+      Menu {
+        Toggle("Open at Login", isOn: Binding(get: { openAtLogin }, set: setOpenAtLogin))
+        Divider()
+        Toggle("Check for Updates Automatically", isOn: Binding(get: { checksForUpdates }, set: {
+          Updater.shared.checksAutomatically = $0
+          checksForUpdates = $0
+        }))
+        Button("Check for Updates Now") { Task { await Updater.shared.check(silent: false) } }
+        Divider()
+        Link("Expenses \(Updater.currentVersion) on GitHub", destination: Updater.page)
+      } label: {
+        Image(systemName: "gearshape")
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
     }
   }
 
-  private func set(_ on: Bool) {
+  private func setOpenAtLogin(_ on: Bool) {
     do {
       if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
       error = nil
     } catch {
       self.error = error.localizedDescription
     }
-    enabled = SMAppService.mainApp.status == .enabled
+    openAtLogin = SMAppService.mainApp.status == .enabled
   }
 }
 
@@ -108,28 +119,5 @@ struct AddExpenseButton: View {
       Label("Add expense", systemImage: "plus")
     }
     .controlSize(.small)
-  }
-}
-
-/// The window's offer of a newer release; nothing shows while the app is current.
-struct UpdateBanner: View {
-  let updater: Updater
-
-  var body: some View {
-    switch updater.state {
-    case .idle:
-      EmptyView()
-    case .available(let version):
-      Button("Update to \(version)") { updater.install() }
-        .controlSize(.small)
-        .buttonStyle(.borderedProminent)
-    case .installing(let version):
-      HStack(spacing: 6) {
-        ProgressView().controlSize(.small)
-        Text("Installing \(version)…").font(.caption)
-      }
-    case .failed(let message):
-      Text(message).font(.caption).foregroundStyle(.red).lineLimit(1).help(message)
-    }
   }
 }
