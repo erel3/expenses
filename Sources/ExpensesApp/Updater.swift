@@ -127,13 +127,21 @@ final class Updater {
     return current
   }
 
-  /// Quit, then a shell waits for this process to end, stops the widget process of the old build
-  /// (WidgetKit rejects every snapshot from a widget whose version no longer matches the bundle's)
-  /// and opens the new app.
+  /// Quit, then a shell waits for this process to end and does what `just install` does after a
+  /// copy: stops the widget process of the old build (WidgetKit rejects every snapshot from a
+  /// widget whose version no longer matches the bundle's: the grey placeholder), registers the new
+  /// bundle and its widget again, and opens the new app, whose launch asks the widget to redraw.
   private static func relaunch(_ app: URL) {
     let pid = ProcessInfo.processInfo.processIdentifier
     let path = app.path.replacingOccurrences(of: "'", with: "'\\''")
-    let script = "while kill -0 \(pid) 2>/dev/null; do sleep 0.1; done; /usr/bin/pkill -x ExpensesWidget; /usr/bin/open -g '\(path)'"
+    let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    let script = [
+      "while kill -0 \(pid) 2>/dev/null; do sleep 0.1; done",
+      "/usr/bin/pkill -x ExpensesWidget",
+      "\(lsregister) -f -R '\(path)'",
+      "/usr/bin/pluginkit -a '\(path)/Contents/PlugIns/ExpensesWidget.appex'",
+      "/usr/bin/open -g '\(path)'"
+    ].joined(separator: "; ")
     let shell = Process()
     shell.executableURL = URL(filePath: "/bin/sh")
     shell.arguments = ["-c", script]
