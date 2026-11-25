@@ -18,6 +18,14 @@ public enum Money {
     return amount < 0 ? "−" + text : text
   }
 
+  /// Short, for the month grid: "1.9M", "450K", "900".
+  public static func compact(_ value: Double) -> String {
+    let magnitude = abs(value)
+    if magnitude >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
+    if magnitude >= 1_000 { return "\(Int((value / 1_000).rounded()))K" }
+    return "\(Int(value.rounded()))"
+  }
+
   static func grouped(_ value: Int) -> String {
     var digits = String(value)
     var parts: [String] = []

@@ -103,13 +103,7 @@ public struct PaymentsWindow<Footer: View>: View {
       Section {
         VStack(alignment: .leading, spacing: 12) {
           HStack(alignment: .firstTextBaseline) {
-            Picker("Month", selection: $month) {
-              ForEach(Ledger.months(all, now: now, calendar: calendar), id: \.self) { month in
-                Text(Dates.monthName(month, calendar: calendar)).tag(month)
-              }
-            }
-            .labelsHidden()
-            .fixedSize()
+            MonthPicker(month: $month, payments: all, now: now, calendar: calendar)
             Spacer()
             Text(Money.tenge(Ledger.total(shown))).font(.title.bold().monospacedDigit())
           }
@@ -174,7 +168,9 @@ public struct PaymentsWindow<Footer: View>: View {
   private func source(_ push: Push) -> String {
     let app = push.isStatement ? (push.isDateOnly ? "Kaspi statement" : "Kaspi") : push.app
     let time = push.isDateOnly ? nil : push.date.map { Dates.time($0, calendar: calendar) }
-    return [app, time].compactMap { $0 }.joined(separator: " · ")
+    // A typed entry the statement absorbed is said so, never silent.
+    let merged = (push.merged ?? []).contains("Manual") ? "merged with your entry" : nil
+    return [app, time, merged].compactMap { $0 }.joined(separator: " · ")
   }
 
   /// What "My own account" marks: a card's end ("*1858") when the details name one, else the
@@ -375,5 +371,83 @@ struct FlowLayout: Layout {
       rows[rows.count - 1] = row
     }
     return rows.filter { !$0.indices.isEmpty }
+  }
+}
+
+/// ‹ November 2026 › — a month back or forward (from the first month with payments to this one);
+/// the title opens a grid: years, then their twelve months, each with what was spent.
+struct MonthPicker: View {
+  @Binding var month: Month
+  let payments: [Push]
+  let now: Date
+  let calendar: Calendar
+  @State private var open = false
+  @State private var year = 0
+
+  private var current: Month { Month(now, calendar: calendar) }
+  private var first: Month { Ledger.months(payments, now: now, calendar: calendar).last ?? current }
+
+  private var totals: [Month: Double] {
+    Dictionary(grouping: payments) { push in push.date.map { Month($0, calendar: calendar) } ?? current }
+      .mapValues(Ledger.total)
+  }
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Button { month = month.previous } label: { Image(systemName: "chevron.left") }
+        .disabled(month <= first)
+      Button {
+        year = month.year
+        open = true
+      } label: {
+        Text(Dates.monthName(month, calendar: calendar)).font(.headline).frame(minWidth: 130)
+      }
+      .popover(isPresented: $open) {
+        grid.padding(14).presentationCompactAdaptation(.popover)
+      }
+      Button { month = month.next } label: { Image(systemName: "chevron.right") }
+        .disabled(month >= current)
+    }
+    .buttonStyle(.borderless)
+    .fixedSize()
+  }
+
+  /// The grid's year: the one picked in it, else the selected month's.
+  private var shownYear: Int { year == 0 ? month.year : year }
+
+  var grid: some View {
+    let totals = self.totals
+    return VStack(alignment: .leading, spacing: 12) {
+      FlowLayout(spacing: 6) {
+        ForEach(Array(first.year...current.year), id: \.self) { candidate in
+          Button(String(candidate)) { year = candidate }
+            .buttonStyle(.bordered)
+            .tint(candidate == shownYear ? .accentColor : .secondary)
+            .controlSize(.small)
+        }
+      }
+      LazyVGrid(columns: Array(repeating: GridItem(.fixed(78), spacing: 6), count: 4), spacing: 6) {
+        ForEach(1...12, id: \.self) { number in
+          let candidate = Month(year: shownYear, month: number)
+          let usable = candidate >= first && candidate <= current
+          Button {
+            month = candidate
+            open = false
+          } label: {
+            VStack(spacing: 2) {
+              Text(candidate.start(calendar: calendar).formatted(Date.FormatStyle(timeZone: calendar.timeZone).month(.abbreviated)))
+                .font(.subheadline.weight(candidate == month ? .bold : .regular))
+              Text(usable ? Money.compact(totals[candidate] ?? 0) : "—")
+                .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(RoundedRectangle(cornerRadius: 8).fill(candidate == month ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.08)))
+          }
+          .buttonStyle(.plain)
+          .disabled(!usable)
+        }
+      }
+    }
+    .frame(width: 4 * 78 + 3 * 6)
   }
 }

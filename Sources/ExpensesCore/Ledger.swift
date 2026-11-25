@@ -16,6 +16,7 @@ public struct Month: Hashable, Comparable, Sendable {
   }
 
   public var previous: Month { month == 1 ? Month(year: year - 1, month: 12) : Month(year: year, month: month - 1) }
+  public var next: Month { month == 12 ? Month(year: year + 1, month: 1) : Month(year: year, month: month + 1) }
 
   public func start(calendar: Calendar = .current) -> Date {
     calendar.date(from: DateComponents(year: year, month: month, day: 1))!

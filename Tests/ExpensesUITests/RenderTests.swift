@@ -48,6 +48,15 @@ final class RenderTests: XCTestCase {
     XCTAssertEqual(CategoryBars.fit(Array(totals.prefix(4)), limit: 4).count, 4, "four fit: nothing merged")
   }
 
+  func testMonthGridRenders() throws {
+    let picker = MonthPicker(month: .constant(Month(year: 2026, month: 11)), payments: Ledger.payments(Self.pushes),
+                             now: Self.now, calendar: Self.calendar)
+    try render(picker.grid.padding(14).background(Color(nsColor: .windowBackgroundColor)), name: "month-grid")
+    XCTAssertEqual(Money.compact(1_940_000), "1.9M")
+    XCTAssertEqual(Money.compact(450_400), "450K")
+    XCTAssertEqual(Money.compact(900), "900")
+  }
+
   func testMoneyReadsLikeTheBanks() {
     XCTAssertEqual(Money.tenge(243_492.4), "243 492 ₸")
     XCTAssertEqual(Money.tenge(-204.5), "−205 ₸")  // rounds half away from zero
