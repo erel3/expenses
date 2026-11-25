@@ -66,4 +66,14 @@ final class LedgerTests: XCTestCase {
     let pushes = [Push(time: "2026-11-25T10:00:00+05:00", app: "Kaspi.kz", title: "", body: "", amount: 1, kzt: 1)]
     XCTAssertEqual(Snapshot(pushes: pushes, now: now).updated, now)
   }
+
+  func testDataFilesArePaymentsThenEveryDevicesManualFile() throws {
+    let folder = FileManager.default.temporaryDirectory.appending(path: "expenses-\(UUID())")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    for name in ["payments.json", "manual-Mac.json", ".manual-iPhone.json.icloud", "upload.json", "Log Payment.shortcut"] {
+      try Data().write(to: folder.appending(path: name))
+    }
+    XCTAssertEqual(ICloud.dataFiles(in: folder).map(\.lastPathComponent), ["payments.json", "manual-Mac.json", "manual-iPhone.json"])
+  }
 }

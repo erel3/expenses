@@ -1,10 +1,24 @@
 import Foundation
 
-/// Where the phone's file is: iCloud Drive → Shortcuts. Only ever read; the phone is its one writer.
+/// Where the payments are: iCloud Drive → Shortcuts. payments.json is the phone automation's;
+/// manual-<device model>.json are the "Log Expense" shortcut's, one per device. Every file has one
+/// writer, and this app is none of them: only ever read.
 public enum ICloud {
-  public static var payments: URL {
-    URL(filePath: NSHomeDirectory())
-      .appending(path: "Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents/payments.json")
+  public static var folder: URL {
+    URL(filePath: NSHomeDirectory()).appending(path: "Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents")
+  }
+
+  public static var payments: URL { folder.appending(path: "payments.json") }
+
+  /// payments.json first, then the manual files by name, whichever exist. A file iCloud evicted
+  /// shows as ".<name>.icloud" and counts under its real name, so it can be asked for.
+  public static func dataFiles(in folder: URL = folder) -> [URL] {
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+    let real = Set(names.map { name in
+      name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(".icloud".count)) : name
+    })
+    let manual = real.filter { $0.hasPrefix("manual-") && $0.hasSuffix(".json") }.sorted()
+    return ((real.contains("payments.json") ? ["payments.json"] : []) + manual).map { folder.appending(path: $0) }
   }
 }
 

@@ -4,29 +4,30 @@ import ExpensesUI
 import Foundation
 import WidgetKit
 
-/// Reads the phone's payments.json whenever it changes, keeps the window's feed, and hands the
-/// widget this month's and last month's payments through the App Group container.
+/// Reads payments.json and every manual-<device>.json whenever one changes, keeps the window's
+/// feed, and hands the widget this month's and last month's payments through the App Group
+/// container.
 ///
-/// Read-only: the file is never written or coordinated for writing. iCloud replaces the file on
-/// every sync, so a vnode watcher would lose it; an NSFilePresenter follows the item instead, and a
-/// 15-minute timer plus a re-read on wake cover a missed notice.
+/// Read-only: no file is ever written or coordinated for writing. iCloud replaces files on every
+/// sync, so a vnode watcher would lose them; an NSFilePresenter on the folder follows its items
+/// instead, and a 15-minute timer plus a re-read on wake cover a missed notice.
 @MainActor
 final class Monitor {
   let feed = Feed()
-  private let url: URL
+  private let folder: URL
   private let parser: Result<Parser, Error>
   private var presenter: Presenter?
   private var timer: Timer?
   private var lastText: String?
   private var lastSnapshot: Snapshot?
 
-  init(url: URL = ICloud.payments) {
-    self.url = url
+  init(folder: URL = ICloud.folder) {
+    self.folder = folder
     parser = Result { try Parser() }
   }
 
   func start() {
-    let presenter = Presenter(url: url) { [weak self] in
+    let presenter = Presenter(url: folder) { [weak self] in
       Task { @MainActor in self?.read() }
     }
     NSFileCoordinator.addFilePresenter(presenter)
@@ -51,17 +52,25 @@ final class Monitor {
       feed.problem = "\(error)"
       return
     }
-    // A file "Optimize Mac Storage" evicted is only a placeholder until asked for.
-    try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-    let text: String
-    do {
-      text = try coordinatedRead()
-    } catch {
-      feed.problem = FileManager.default.fileExists(atPath: url.path)
-        ? "Cannot read payments.json: \(error.localizedDescription)"
-        : "No payments.json in iCloud Drive → Shortcuts yet"
+    let files = ICloud.dataFiles(in: folder)
+    guard !files.isEmpty else {
+      feed.problem = "No payments.json in iCloud Drive → Shortcuts yet"
       return
     }
+    // One reparseLines over all files together, as reparse.mjs does: the duplicate rule and the
+    // numbers stay the same as `just reparse`.
+    var texts: [String] = []
+    for file in files {
+      // A file "Optimize Mac Storage" evicted is only a placeholder until asked for.
+      try? FileManager.default.startDownloadingUbiquitousItem(at: file)
+      do {
+        texts.append(try coordinatedRead(file))
+      } catch {
+        feed.problem = "Cannot read \(file.lastPathComponent): \(error.localizedDescription)"
+        return
+      }
+    }
+    let text = texts.joined(separator: "\n")
     feed.updated = .now
     guard text != lastText else {
       feed.problem = nil
@@ -79,10 +88,10 @@ final class Monitor {
     }
   }
 
-  private func coordinatedRead() throws -> String {
+  private func coordinatedRead(_ file: URL) throws -> String {
     var result: Result<String, Error> = .failure(CocoaError(.fileReadUnknown))
     var coordinationError: NSError?
-    NSFileCoordinator(filePresenter: presenter).coordinate(readingItemAt: url, options: [], error: &coordinationError) { url in
+    NSFileCoordinator(filePresenter: presenter).coordinate(readingItemAt: file, options: [], error: &coordinationError) { url in
       result = Result { try String(contentsOf: url, encoding: .utf8) }
     }
     if let coordinationError { throw coordinationError }
@@ -105,7 +114,8 @@ final class Monitor {
   }
 }
 
-/// Tells the monitor when iCloud changed, replaced or delivered payments.json.
+/// Tells the monitor when iCloud changed, replaced or delivered a file in the Shortcuts folder:
+/// payments.json, a manual file, or one that just appeared.
 private final class Presenter: NSObject, NSFilePresenter, @unchecked Sendable {
   let presentedItemURL: URL?
   let presentedItemOperationQueue = OperationQueue()
@@ -118,6 +128,8 @@ private final class Presenter: NSObject, NSFilePresenter, @unchecked Sendable {
   }
 
   func presentedItemDidChange() { changed() }
+  func presentedSubitemDidChange(at url: URL) { changed() }
+  func presentedSubitemDidAppear(at url: URL) { changed() }
   func presentedItemDidGain(_ version: NSFileVersion) { changed() }
   func presentedItemDidResolveConflict(_ version: NSFileVersion) { changed() }
   func accommodatePresentedItemDeletion(completionHandler: @escaping @Sendable (Error?) -> Void) {
