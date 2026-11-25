@@ -1,0 +1,37 @@
+# Claude Code — ignore .claude/ by default, allowlist only team-shared config.
+# Everything not listed stays ignored: settings.local.json, CLAUDE.local.md,
+# plugins/, projects/, shell-snapshots/, history.jsonl, logs/, ide/, statsig/,
+# todos/, sandbox/, .credentials.json, agent-memory/, worktrees/, output-styles/.
+.claude/*
+!.claude/CLAUDE.md
+!.claude/settings.json
+!.claude/.mcp.json
+!.claude/commands/
+!.claude/agents/
+!.claude/skills/
+!.claude/hooks/
+!.claude/rules/
+
+# superpowers runtime state
+.superpowers/
+
+# OpenWolf — per-dev / derived state (rebuild with `openwolf scan`)
+.wolf/anatomy.md
+.wolf/anatomy-index.json
+.wolf/_scan-state.json
+.wolf/STATUS.md
+.wolf/memory.md
+.wolf/token-ledger.json
+.wolf/cron-state.json
+.wolf/suggestions.json
+.wolf/daemon.log
+.wolf/dashboard-token
+.wolf/backups/
+.wolf/hooks/_*.json
+
+# Swift / build products
+.build/
+.swiftpm/
+.xcodebuild/
+dist/
+.DS_Store
