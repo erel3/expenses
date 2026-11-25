@@ -70,51 +70,54 @@ public struct PaymentsWindow<Footer: View>: View {
 
   // MARK: Payments
 
+  /// One list for the whole tab, the month header and category chips included: on the iPhone a
+  /// pull anywhere is the one refresh, and nothing scrolls on its own (the chips once sat in their
+  /// own scroll view, which iOS gave a second pull-to-refresh and let drag every way).
   private var payments: some View {
     let all = Ledger.payments(feed.pushes)
     let inMonth = Ledger.inMonth(all, month, calendar: calendar)
     let totals = Ledger.byCategory(inMonth)
     let shown = category.map { picked in inMonth.filter { $0.shownCategory == picked } } ?? inMonth
-    return VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .firstTextBaseline) {
-        Picker("Month", selection: $month) {
-          ForEach(Ledger.months(all, now: now, calendar: calendar), id: \.self) { month in
-            Text(Dates.monthName(month, calendar: calendar)).tag(month)
+    return List {
+      Section {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack(alignment: .firstTextBaseline) {
+            Picker("Month", selection: $month) {
+              ForEach(Ledger.months(all, now: now, calendar: calendar), id: \.self) { month in
+                Text(Dates.monthName(month, calendar: calendar)).tag(month)
+              }
+            }
+            .labelsHidden()
+            .fixedSize()
+            Spacer()
+            Text(Money.tenge(Ledger.total(shown))).font(.title.bold().monospacedDigit())
+          }
+          FlowLayout(spacing: 8) {
+            ForEach(totals, id: \.category) { total in chip(total) }
           }
         }
-        .labelsHidden()
-        .fixedSize()
-        Spacer()
-        Text(Money.tenge(Ledger.total(shown))).font(.title.bold().monospacedDigit())
-      }
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 8) {
-          ForEach(totals, id: \.category) { total in chip(total) }
-        }
+        .listRowSeparator(.hidden)
       }
       if shown.isEmpty {
         ContentUnavailableView("No payments", systemImage: "creditcard",
                                description: Text("Nothing was spent in \(Dates.monthName(month, calendar: calendar)) yet."))
-      } else {
-        List {
-          ForEach(Ledger.byDay(shown, calendar: calendar), id: \.start) { day in
-            Section {
-              // Identified by the push itself: offsets repeat from one day section to the next, and List
-              // then reused another day's row (seen in the render test).
-              ForEach(day.payments, id: \.self) { push in row(push) }
-            } header: {
-              HStack {
-                Text(Dates.day(day.start, now: now, calendar: calendar))
-                Spacer()
-                Text(Money.tenge(day.kzt)).monospacedDigit()
-              }
-            }
+          .listRowSeparator(.hidden)
+      }
+      ForEach(Ledger.byDay(shown, calendar: calendar), id: \.start) { day in
+        Section {
+          // Identified by the push itself: offsets repeat from one day section to the next, and List
+          // then reused another day's row (seen in the render test).
+          ForEach(day.payments, id: \.self) { push in row(push) }
+        } header: {
+          HStack {
+            Text(Dates.day(day.start, now: now, calendar: calendar))
+            Spacer()
+            Text(Money.tenge(day.kzt)).monospacedDigit()
           }
         }
-        .listStyle(.inset)
       }
     }
-    .padding([.horizontal, .top], 14)
+    .listStyle(.inset)
     .onChange(of: month) { category = nil }
   }
 
@@ -191,5 +194,54 @@ public struct PaymentsWindow<Footer: View>: View {
       }
     }
     .font(.caption)
+  }
+}
+
+/// Lays its children out in rows, wrapping to the next row when one is full: the category chips,
+/// which must not scroll on their own.
+struct FlowLayout: Layout {
+  var spacing: CGFloat = 8
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let rows = rows(for: subviews, width: proposal.width ?? .infinity)
+    let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+    let width = rows.map(\.width).max() ?? 0
+    return CGSize(width: proposal.width ?? width, height: height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    var y = bounds.minY
+    for row in rows(for: subviews, width: bounds.width) {
+      var x = bounds.minX
+      for index in row.indices {
+        let size = subviews[index].sizeThatFits(.unspecified)
+        subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+        x += size.width + spacing
+      }
+      y += row.height + spacing
+    }
+  }
+
+  private struct Row {
+    var indices: [Int] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+  }
+
+  private func rows(for subviews: Subviews, width: CGFloat) -> [Row] {
+    var rows: [Row] = [Row()]
+    for index in subviews.indices {
+      let size = subviews[index].sizeThatFits(.unspecified)
+      let needed = rows[rows.count - 1].indices.isEmpty ? size.width : rows[rows.count - 1].width + spacing + size.width
+      if needed > width && !rows[rows.count - 1].indices.isEmpty {
+        rows.append(Row())
+      }
+      var row = rows[rows.count - 1]
+      row.width = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+      row.height = max(row.height, size.height)
+      row.indices.append(index)
+      rows[rows.count - 1] = row
+    }
+    return rows.filter { !$0.indices.isEmpty }
   }
 }
