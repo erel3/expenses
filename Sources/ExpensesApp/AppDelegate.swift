@@ -27,9 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   /// (⌘Tab, Mission Control), and goes back to the background when it closes.
   private func showWindow() {
     if window == nil {
-      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) {
+      let window = Self.paymentsWindow(PaymentsWindow(feed: monitor.feed) { [weak self] in
         AddExpenseButton()
-        SettingsMenu()
+        SettingsMenu(importStatements: { self?.importStatements() })
       })
       window.setFrameAutosaveName("Payments")
       window.delegate = self
@@ -39,6 +39,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     NSApp.setActivationPolicy(.regular)
     NSApp.activate()
     window?.makeKeyAndOrderFront(nil)
+  }
+
+  /// Kaspi Gold statements chosen in an open panel (several at once); the result in an alert.
+  private func importStatements() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.pdf]
+    panel.allowsMultipleSelection = true
+    panel.message = "Kaspi Gold statements (Kaspi.kz → Gold → Statement, PDF)"
+    guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+    let alert = NSAlert()
+    alert.messageText = "Imported"
+    alert.informativeText = monitor.importStatements(panel.urls).joined(separator: "\n")
+    alert.runModal()
   }
 
   func windowWillClose(_ notification: Notification) {
@@ -72,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 /// The window's settings, as Batteries' General pane has them: start at login (the widget stays
 /// current only while the app runs), update checks, the project page.
 struct SettingsMenu: View {
+  let importStatements: () -> Void
   @State private var openAtLogin = SMAppService.mainApp.status == .enabled
   @State private var checksForUpdates = Updater.shared.checksAutomatically
   @State private var error: String?
@@ -80,6 +94,8 @@ struct SettingsMenu: View {
     HStack(spacing: 8) {
       if let error { Text(error).font(.caption).foregroundStyle(.red).lineLimit(1).help(error) }
       Menu {
+        Button("Import Statements…", action: importStatements)
+        Divider()
         Toggle("Open at Login", isOn: Binding(get: { openAtLogin }, set: setOpenAtLogin))
         Divider()
         Toggle("Check for Updates Automatically", isOn: Binding(get: { checksForUpdates }, set: {

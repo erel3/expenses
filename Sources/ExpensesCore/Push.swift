@@ -24,11 +24,22 @@ public struct Push: Codable, Hashable, Sendable {
   public var hidden: Bool?
   /// What corrections changed: "category", "amount".
   public var edited: [String]?
+  /// A statement row that is no spending: "income" (money in), "own" (between own accounts).
+  public var kind: String?
+  /// A statement row: the bank gives the day, not the time (unless a push was merged into it).
+  public var dateOnly: Bool?
+  /// What was merged into a statement row: "Kaspi.kz" (its push), "Manual".
+  public var merged: [String]?
+  /// A statement row's operation: "Покупка", "Перевод", "Разное", "Снятие"…
+  public var operation: String?
+  /// A transfer to someone: "My own account" applies to these.
+  public var transfer: Bool?
 
   public init(time: String, app: String, title: String, subtitle: String? = nil, body: String,
               amount: Double? = nil, currency: String? = nil, kzt: Double? = nil,
               merchant: String? = nil, category: String? = nil, error: String? = nil,
-              id: String? = nil, hidden: Bool? = nil, edited: [String]? = nil) {
+              id: String? = nil, hidden: Bool? = nil, edited: [String]? = nil, kind: String? = nil,
+              dateOnly: Bool? = nil) {
     self.time = time
     self.app = app
     self.title = title
@@ -43,7 +54,12 @@ public struct Push: Codable, Hashable, Sendable {
     self.id = id
     self.hidden = hidden
     self.edited = edited
+    self.kind = kind
+    self.dateOnly = dateOnly
   }
+
+  public var isStatement: Bool { app == "Kaspi statement" }
+  public var isDateOnly: Bool { dateOnly == true }
 
   public var isHidden: Bool { hidden == true }
   public var isEdited: Bool { !(edited ?? []).isEmpty }

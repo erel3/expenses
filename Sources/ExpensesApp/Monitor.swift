@@ -58,6 +58,21 @@ final class Monitor {
     }
   }
 
+  /// Kaspi Gold statements (PDF) into the Expenses folder, then read again. One line per file.
+  func importStatements(_ pdfs: [URL]) -> [String] {
+    guard case .success(let parser) = parser else { return ["parse.js is missing"] }
+    let reports = pdfs.map { pdf in
+      do {
+        let result = try StatementImport.run(pdf, parser: parser, into: ICloud.expenses(in: folder))
+        return "\(pdf.lastPathComponent): \(result.rows) rows, \(result.from) to \(result.to)"
+      } catch {
+        return "\(pdf.lastPathComponent): \(error.localizedDescription)"
+      }
+    }
+    read()
+    return reports
+  }
+
   func read() {
     let parser: Parser
     switch self.parser {

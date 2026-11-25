@@ -50,7 +50,9 @@ public enum Ledger {
     pushes.filter { $0.isPayment && (includingHidden || !$0.isHidden) }
   }
 
-  public static func raw(_ pushes: [Push]) -> [Push] { pushes.filter { !$0.isPayment && !$0.isHidden } }
+  /// Pushes no parser understood. Statement rows that are no spending (money in, own transfers) are
+  /// understood, so they are not raw.
+  public static func raw(_ pushes: [Push]) -> [Push] { pushes.filter { !$0.isPayment && !$0.isHidden && $0.kind == nil } }
 
   /// Hidden payments never count, even when listed.
   public static func total(_ payments: [Push]) -> Double {

@@ -20,6 +20,7 @@ public final class Parser {
   private let context: JSContext
   private let reparseLines: JSValue
   private let categoriesFunction: JSValue
+  private let parseStatementFunction: JSValue
 
   public init(script: String) throws {
     guard let context = JSContext() else { throw ParserError.script("no JavaScript context") }
@@ -33,6 +34,7 @@ public final class Parser {
     self.context = context
     self.reparseLines = function
     self.categoriesFunction = context.objectForKeyedSubscript("categories")
+    self.parseStatementFunction = context.objectForKeyedSubscript("parseStatement")
   }
 
   /// The parse.js `just app` copies into the bundle's Resources.
@@ -60,5 +62,21 @@ public final class Parser {
   /// Every category in use: parse.js's table, the ones corrections gave, then "other".
   public func categories(edits: String = "") -> [String] {
     categoriesFunction.call(withArguments: [edits])?.toArray()?.compactMap { $0 as? String } ?? ["other"]
+  }
+
+  /// A statement's text (every page) -> the JSON lines of its file: a header, then one per row.
+  public func parseStatement(_ text: String) throws -> [String] {
+    var thrown: String?
+    context.exceptionHandler = { _, value in thrown = value?.toString() }
+    let result = parseStatementFunction.call(withArguments: [text])
+    if let thrown { throw ParserError.result(thrown) }
+    let lines = context.objectForKeyedSubscript("JSON").invokeMethod("stringify", withArguments: [result as Any])
+    guard let lines, lines.isString, let data = lines.toString().data(using: .utf8),
+          let objects = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+      throw ParserError.result("parseStatement gave nothing back")
+    }
+    return try objects.map { object in
+      String(bytes: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), encoding: .utf8) ?? ""
+    }
   }
 }

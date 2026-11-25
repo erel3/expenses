@@ -10,6 +10,8 @@ public enum Correction: Equatable, Sendable {
   case amount(id: String, value: Double)
   case hide(id: String)
   case unhide(id: String)
+  /// Transfers whose details hold `value` ("*1858", a card's end) go to the owner's own account.
+  case own(value: String)
 
   /// One JSON line, in the shape parse.js `readEdits` takes.
   public func line(at date: Date = .now) -> String {
@@ -22,6 +24,7 @@ public enum Correction: Equatable, Sendable {
     case .amount(let id, let value): fields.merge(["edit": "amount", "id": id, "value": value]) { $1 }
     case .hide(let id): fields.merge(["edit": "hide", "id": id]) { $1 }
     case .unhide(let id): fields.merge(["edit": "unhide", "id": id]) { $1 }
+    case .own(let value): fields.merge(["edit": "own", "value": value]) { $1 }
     }
     let data = (try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])) ?? Data()
     return String(bytes: data, encoding: .utf8) ?? ""

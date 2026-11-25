@@ -169,6 +169,22 @@ public struct PaymentsWindow<Footer: View>: View {
     }
   }
 
+  /// "Kaspi.kz · 13:05"; a statement row "Kaspi statement" with no time (the bank gives the day),
+  /// or with its push's time when one was merged into it.
+  private func source(_ push: Push) -> String {
+    let app = push.isStatement ? (push.isDateOnly ? "Kaspi statement" : "Kaspi") : push.app
+    let time = push.isDateOnly ? nil : push.date.map { Dates.time($0, calendar: calendar) }
+    return [app, time].compactMap { $0 }.joined(separator: " · ")
+  }
+
+  /// What "My own account" marks: a card's end ("*1858") when the details name one, else the
+  /// details themselves.
+  private func ownKey(_ push: Push) -> String {
+    let details = push.merchant ?? ""
+    if let range = details.range(of: #"\*\d{4}"#, options: .regularExpression) { return String(details[range]) }
+    return details
+  }
+
   // MARK: Corrections
 
   private func merchantName(_ push: Push) -> String {
@@ -206,6 +222,9 @@ public struct PaymentsWindow<Footer: View>: View {
           }
         }
       }
+      if push.transfer == true {
+        Button("My own account (not spending)") { feed.apply?(.own(value: ownKey(push))) }
+      }
       Button("Fix amount…") {
         amountText = String(Int((push.kzt ?? 0).rounded()))
         fixing = push
@@ -242,8 +261,7 @@ public struct PaymentsWindow<Footer: View>: View {
       CategoryIcon(category: push.shownCategory)
       VStack(alignment: .leading, spacing: 2) {
         Text(push.merchant.flatMap { $0.isEmpty ? nil : $0 } ?? push.title).lineLimit(1)
-        Text([push.app, push.date.map { Dates.time($0, calendar: calendar) }].compactMap { $0 }.joined(separator: " · "))
-          .font(.caption).foregroundStyle(.secondary)
+        Text(source(push)).font(.caption).foregroundStyle(.secondary)
       }
       Spacer()
       VStack(alignment: .trailing, spacing: 2) {

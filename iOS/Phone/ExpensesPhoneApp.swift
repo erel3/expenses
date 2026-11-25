@@ -22,6 +22,8 @@ struct ExpensesPhoneApp: App {
 struct RootView: View {
   let model: PhoneModel
   @State private var picking = false
+  @State private var importing = false
+  @State private var imported: String?
   @Environment(\.openURL) private var openURL
 
   var body: some View {
@@ -43,6 +45,7 @@ struct RootView: View {
               Label("Add expense", systemImage: "plus")
             }
             Menu {
+              Button("Import Kaspi statements…") { importing = true }
               Button("Choose another folder") { picking = true }
             } label: {
               Image(systemName: "ellipsis.circle")
@@ -55,6 +58,20 @@ struct RootView: View {
     }
     .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
       if case .success(let folder) = result { model.choose(folder) }
+    }
+    // A second importer on its own view: two on one view would share one presentation.
+    .background(EmptyView().fileImporter(isPresented: $importing, allowedContentTypes: [.pdf],
+                                         allowsMultipleSelection: true) { result in
+      if case .success(let pdfs) = result, !pdfs.isEmpty { imported = model.importStatements(pdfs) }
+    })
+    // "Open in Expenses" from the share sheet (a statement PDF saved from Kaspi).
+    .onOpenURL { url in
+      if url.isFileURL, url.pathExtension.lowercased() == "pdf" { imported = model.importStatements([url]) }
+    }
+    .alert("Imported", isPresented: Binding(get: { imported != nil }, set: { if !$0 { imported = nil } })) {
+      Button("OK") { imported = nil }
+    } message: {
+      Text(imported ?? "")
     }
     .refreshable { model.read() }
   }

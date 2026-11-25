@@ -51,6 +51,29 @@ final class PhoneModel {
     read()
   }
 
+  /// Kaspi Gold statements picked in Files or shared from another app, into the Expenses folder.
+  func importStatements(_ pdfs: [URL]) -> String {
+    guard case .success(let parser) = parser else { return "parse.js is missing" }
+    guard let folder = FolderAccess.folder(), folder.startAccessingSecurityScopedResource() else {
+      needsFolder = true
+      return "Choose the Shortcuts folder first"
+    }
+    defer { folder.stopAccessingSecurityScopedResource() }
+    let reports = pdfs.map { pdf in
+      let scoped = pdf.startAccessingSecurityScopedResource()
+      defer { if scoped { pdf.stopAccessingSecurityScopedResource() } }
+      do {
+        let result = try StatementImport.run(pdf, parser: parser, into: ICloud.expenses(in: folder))
+        return "\(result.rows) rows, \(result.from) to \(result.to)"
+      } catch {
+        return "\(pdf.lastPathComponent): \(error.localizedDescription)"
+      }
+    }
+    lastLoaded = nil
+    read()
+    return reports.joined(separator: "\n")
+  }
+
   func read() {
     let parser: Parser
     switch self.parser {
