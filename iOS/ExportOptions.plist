@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Ad Hoc ("release-testing"): runs on the registered iPhone without Developer Mode, a year per
-       profile, never published. A development build would need Developer Mode on to open. -->
+  <!-- Ad Hoc ("release-testing"): the registered iPhone only, a year per profile, never published.
+       Like any .ipa install it still needs Developer Mode on (iOS 16+). -->
   <key>method</key>
   <string>release-testing</string>
   <key>teamID</key>

@@ -110,9 +110,8 @@ ios-project:
 _iphone:
   @xcrun devicectl list devices 2>/dev/null | awk '/iPhone/ && /physical/ && !/unavailable/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i; exit }'
 
-# Build an Ad Hoc .ipa for the registered iPhone: archive, then export signed for "release-testing".
-# Ad Hoc runs without Developer Mode (a development build would not open with it off), one year per
-# profile, never published. The first run registers the paired iPhone in the team (it has to be
+# Build an Ad Hoc .ipa for the registered iPhone: archive, then export signed for "release-testing":
+# one year per profile, never published. It still needs Developer Mode on (see ios-install). The first run registers the paired iPhone in the team (it has to be
 # connected and unlocked then) and creates the profiles; later runs need no device at all.
 ios-build: ios-project
   #!/usr/bin/env bash
@@ -126,10 +125,10 @@ ios-build: ios-project
     -exportPath .build/ios/export -allowProvisioningUpdates | tail -2
   ls .build/ios/export/*.ipa
 
-# Owner only: install the last ios-build on the paired iPhone (connected, unlocked). devicectl
-# installs through the developer services, and iOS then requires Developer Mode to OPEN the app,
-# Ad Hoc signature or not (seen 2026-11-25). To keep Developer Mode off, install the .ipa from
-# Finder instead: iPhone in the sidebar, drag .build/ios/export/Expenses.ipa onto its window.
+# Owner only: install the last ios-build on the paired iPhone (connected, unlocked). Developer Mode
+# stays on: since iOS 16 any app installed from an .ipa, Ad Hoc included, by devicectl, Finder or
+# Apple Configurator alike, needs it to open (Apple's docs; seen 2026-11-25). Only App Store,
+# TestFlight (90-day builds) or enterprise apps run without it.
 ios-install:
   #!/usr/bin/env bash
   set -euo pipefail
