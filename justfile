@@ -26,7 +26,9 @@ app:
   cp "{{capture}}/parse.js" "{{app}}/Contents/Resources/parse.js"
   cp App/Info.plist "{{app}}/Contents/Info.plist"
   # Assets.car (CFBundleIconName, what newer macOS reads) plus AppIcon.icns for older readers
-  xcrun actool App/Assets.xcassets --compile "{{app}}/Contents/Resources" --platform macosx \
+  # Absolute paths: actool resolves relative ones against $PWD, which an earlier `cd iOS` in the same
+  # just run left pointing at iOS/ (seen 2026-11-25: "output directory … iOS/dist … does not exist").
+  xcrun actool "{{justfile_directory()}}/App/Assets.xcassets" --compile "{{justfile_directory()}}/{{app}}/Contents/Resources" --platform macosx \
     --minimum-deployment-target 15.0 --app-icon AppIcon --output-partial-info-plist /dev/null >/dev/null
   cp Widget/Info.plist "{{appex}}/Contents/Info.plist"
   version=$(cat VERSION)
