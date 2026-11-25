@@ -60,10 +60,14 @@ final class RenderTests: XCTestCase {
       Case(name: "small", family: .systemSmall, size: CGSize(width: 170, height: 170), payments: payments),
       Case(name: "small-empty", family: .systemSmall, size: CGSize(width: 170, height: 170), payments: []),
       Case(name: "medium", family: .systemMedium, size: CGSize(width: 364, height: 170), payments: payments),
-      Case(name: "large", family: .systemLarge, size: CGSize(width: 364, height: 382), payments: payments)
+      Case(name: "large", family: .systemLarge, size: CGSize(width: 364, height: 382), payments: payments),
+      Case(name: "small-stale", family: .systemSmall, size: CGSize(width: 170, height: 170), payments: payments),
+      Case(name: "large-stale", family: .systemLarge, size: CGSize(width: 364, height: 382), payments: payments)
     ]
     for test in cases {
-      let view = ExpensesWidgetView(payments: test.payments, family: test.family, now: Self.now, calendar: Self.calendar)
+      let updated = test.name.hasSuffix("stale") ? Self.now.addingTimeInterval(-3 * 3600) : Self.now
+      let view = ExpensesWidgetView(payments: test.payments, family: test.family, now: Self.now, calendar: Self.calendar,
+                                    updated: updated)
         .padding(16)
         .frame(width: test.size.width, height: test.size.height)
         .background(Color(nsColor: .windowBackgroundColor))

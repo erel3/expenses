@@ -57,4 +57,13 @@ final class LedgerTests: XCTestCase {
     XCTAssertEqual(Snapshot.load(from: url), snapshot)
     XCTAssertEqual(Snapshot.load(from: url.appending(path: "missing")), Snapshot())
   }
+
+  func testSnapshotGoesStaleWhenTheAppStopsWriting() {
+    let now = Fixtures.date("2026-11-25T18:00:00+05:00")
+    XCTAssertFalse(Snapshot(updated: now.addingTimeInterval(-20 * 60)).isStale(now: now))
+    XCTAssertTrue(Snapshot(updated: now.addingTimeInterval(-50 * 60)).isStale(now: now))
+    XCTAssertTrue(Snapshot().isStale(now: now), "never written by the app")
+    let pushes = [Push(time: "2026-11-25T10:00:00+05:00", app: "Kaspi.kz", title: "", body: "", amount: 1, kzt: 1)]
+    XCTAssertEqual(Snapshot(pushes: pushes, now: now).updated, now)
+  }
 }

@@ -9,23 +9,51 @@ public struct ExpensesWidgetView: View {
   let family: WidgetFamily
   let now: Date
   let calendar: Calendar
+  /// The snapshot's heartbeat; see `Snapshot.updated`.
+  let updated: Date?
 
-  public init(payments: [Push], family: WidgetFamily, now: Date = .now, calendar: Calendar = .current) {
+  public init(payments: [Push], family: WidgetFamily, now: Date = .now, calendar: Calendar = .current,
+              updated: Date? = .now) {
     self.payments = payments
     self.family = family
     self.now = now
     self.calendar = calendar
+    self.updated = updated
   }
+
+  private var stale: Bool { Snapshot(payments: [], updated: updated).isStale(now: now) }
 
   private var month: [Push] { Ledger.inMonth(payments, Month(now, calendar: calendar), calendar: calendar) }
   private var today: [Push] { Ledger.onDay(payments, now, calendar: calendar) }
 
   public var body: some View {
-    switch family {
-    case .systemMedium: medium
-    case .systemLarge, .systemExtraLarge: large
-    default: small
+    VStack(alignment: .leading, spacing: 6) {
+      Group {
+        switch family {
+        case .systemMedium: medium
+        case .systemLarge, .systemExtraLarge: large
+        default: small
+        }
+      }
+      .opacity(stale ? 0.4 : 1)
+      if stale { staleNote }
     }
+  }
+
+  /// The app stopped writing (or never ran): the numbers above may miss new payments.
+  private var staleNote: some View {
+    HStack(spacing: 4) {
+      Image(systemName: "clock.badge.exclamationmark")
+      if let updated {
+        Text("Updated \(Text(updated, style: .relative)) ago")
+      } else {
+        Text("Open Expenses to start")
+      }
+    }
+    .font(.caption2)
+    .foregroundStyle(.orange)
+    .lineLimit(1)
+    .minimumScaleFactor(0.7)
   }
 
   private var small: some View {

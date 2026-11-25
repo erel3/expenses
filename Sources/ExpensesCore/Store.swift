@@ -13,9 +13,18 @@ public enum ICloud {
 /// month needs no app.
 public struct Snapshot: Codable, Equatable, Sendable {
   public var payments: [Push]
+  /// When the app last read the phone's file, changed or not: a heartbeat. The widget dims and
+  /// says so when it is old, because the app stopped (quit, crashed, not started at login) and the
+  /// payments it shows may be missing new ones. Nil when no app ever wrote one.
+  public var updated: Date?
 
-  public init(payments: [Push] = []) {
+  /// How old `updated` may get before the widget calls its numbers stale: the app re-reads every
+  /// 15 minutes and on wake, so twice that plus slack never fires while it runs.
+  public static let staleAfter: TimeInterval = 45 * 60
+
+  public init(payments: [Push] = [], updated: Date? = nil) {
     self.payments = payments
+    self.updated = updated
   }
 
   /// This month's and last month's payments from every push.
@@ -24,19 +33,27 @@ public struct Snapshot: Codable, Equatable, Sendable {
     let keep: Set<Month> = [month, month.previous]
     self.init(payments: Ledger.payments(pushes).filter { push in
       push.date.map { keep.contains(Month($0, calendar: calendar)) } ?? false
-    })
+    }, updated: now)
+  }
+
+  public func isStale(now: Date = .now) -> Bool {
+    guard let updated else { return true }
+    return now.timeIntervalSince(updated) > Snapshot.staleAfter
   }
 
   /// Missing or unreadable reads as empty: the widget then shows zeroes, never an error.
   public static func load(from url: URL) -> Snapshot {
     guard let data = try? Data(contentsOf: url) else { return Snapshot() }
-    return (try? JSONDecoder().decode(Snapshot.self, from: data)) ?? Snapshot()
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    return (try? decoder.decode(Snapshot.self, from: data)) ?? Snapshot()
   }
 
   public func save(to url: URL) throws {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
+    encoder.dateEncodingStrategy = .iso8601
     try encoder.encode(self).write(to: url, options: .atomic)
   }
 }

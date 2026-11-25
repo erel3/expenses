@@ -65,6 +65,7 @@ final class Monitor {
     feed.updated = .now
     guard text != lastText else {
       feed.problem = nil
+      handToWidget(feed.pushes)  // the heartbeat
       return
     }
     do {
@@ -88,14 +89,16 @@ final class Monitor {
     return try result.get()
   }
 
-  /// WidgetKit rations reloads: ask for one only when what the widget draws changed.
+  /// Written on every read, so `updated` beats while the app runs. WidgetKit rations reloads: one
+  /// is asked for only when the payments changed, or when the widget was showing stale numbers;
+  /// otherwise the widget picks the new stamp up on its own timeline.
   private func handToWidget(_ pushes: [Push]) {
     let snapshot = Snapshot(pushes: pushes)
-    guard snapshot != lastSnapshot else { return }
     do {
+      let shown = lastSnapshot ?? Snapshot.load(from: Store.snapshotURL)
       try snapshot.save(to: Store.snapshotURL)
       lastSnapshot = snapshot
-      WidgetCenter.shared.reloadAllTimelines()
+      if snapshot.payments != shown.payments || shown.isStale() { WidgetCenter.shared.reloadAllTimelines() }
     } catch {
       feed.problem = "Cannot hand payments to the widget: \(error.localizedDescription)"
     }

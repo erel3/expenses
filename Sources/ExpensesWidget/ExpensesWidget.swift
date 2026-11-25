@@ -9,7 +9,7 @@ import WidgetKit
 
 struct Entry: TimelineEntry {
   let date: Date
-  let payments: [Push]
+  let snapshot: Snapshot
 }
 
 struct Provider: TimelineProvider {
@@ -20,26 +20,27 @@ struct Provider: TimelineProvider {
       return Push(time: time, app: "Kaspi.kz", title: "Kaspi Gold", body: "", amount: kzt, currency: "₸",
                   kzt: kzt, merchant: merchant, category: category)
     }
-    return Entry(date: now, payments: [
+    return Entry(date: now, snapshot: Snapshot(payments: [
       push(30, "YANDEX.GO", "transport", 2480), push(90, "WOLT.COM", "food", 6567),
       push(600, "ARBUZ", "food", 18078), push(2000, "APPLE.COM/BILL", "subscriptions", 1490)
-    ])
+    ], updated: now))
   }
 
   func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
     completion(context.isPreview ? placeholder(in: context) : current())
   }
 
-  /// New entries come from the app when a payment arrives; on its own the widget redraws at
-  /// midnight (today resets) or within an hour, whichever is first.
+  /// New entries come from the app when a payment arrives; on its own the widget re-reads at
+  /// midnight (today resets) or within 30 minutes, whichever is first, which is also how it notices
+  /// that the app stopped writing.
   func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
     let entry = current()
     let midnight = Calendar.current.startOfDay(for: entry.date).addingTimeInterval(86_400 + 5)
-    completion(Timeline(entries: [entry], policy: .after(min(midnight, entry.date.addingTimeInterval(3600)))))
+    completion(Timeline(entries: [entry], policy: .after(min(midnight, entry.date.addingTimeInterval(30 * 60)))))
   }
 
   private func current() -> Entry {
-    Entry(date: .now, payments: Snapshot.load(from: Store.snapshotURL).payments)
+    Entry(date: .now, snapshot: Snapshot.load(from: Store.snapshotURL))
   }
 }
 
@@ -48,7 +49,7 @@ struct EntryView: View {
   let entry: Entry
 
   var body: some View {
-    ExpensesWidgetView(payments: entry.payments, family: family, now: entry.date)
+    ExpensesWidgetView(payments: entry.snapshot.payments, family: family, now: entry.date, updated: entry.snapshot.updated)
       // Other apps' widgets cannot get macOS 27's Liquid Glass; materials and translucent colours
       // come out the same grey (Batteries, 2026-11-21). The system's own background it is.
       .containerBackground(for: .widget) { Color.clear }
