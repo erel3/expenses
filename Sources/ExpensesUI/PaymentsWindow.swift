@@ -285,6 +285,13 @@ public struct PaymentsWindow<Footer: View>: View {
           }
           .textSelection(.enabled)
           .padding(.vertical, 2)
+          // Ads, failed attempts, a broken test entry: hidden from this list (undo: none needed,
+          // they never count anyway; the line itself stays in the file).
+          .contextMenu {
+            if feed.apply != nil, let id = push.id {
+              Button("Hide", role: .destructive) { feed.apply?(.hide(id: id)) }
+            }
+          }
         }
         .listStyle(.inset)
       }
