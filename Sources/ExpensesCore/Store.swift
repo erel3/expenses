@@ -47,8 +47,16 @@ public enum ICloud {
     )
   }
 
+  /// The folder's names, listed inside a coordinated read of the folder: iCloud brings the listing
+  /// up to date first. A plain listing on the iPhone missed files another device had just added
+  /// (the 7 statements imported on the Mac, 2026-11-25), so the app showed none of them.
   private static func names(in folder: URL) -> [String] {
-    let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+    var names: [String] = []
+    var coordination: NSError?
+    NSFileCoordinator().coordinate(readingItemAt: folder, options: [.immediatelyAvailableMetadataOnly], error: &coordination) { url in
+      names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+    }
+    if coordination != nil { names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] }
     return Set(names.map { name in
       name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(".icloud".count)) : name
     }).sorted()
