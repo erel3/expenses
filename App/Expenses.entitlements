@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Not sandboxed: it reads payments.json in the Shortcuts folder of iCloud Drive, which a
+       sandboxed app could only reach through a file the user picks. -->
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>73R36N2A46.com.akim.expenses</string>
+  </array>
+</dict>
+</plist>
